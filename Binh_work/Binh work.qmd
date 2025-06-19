@@ -1,0 +1,22 @@
+---
+title: "Binh work"
+format: html
+---
+
+Some preliminary work on the data: importing datasets and stuff like that.
+
+```{r}
+library(tidyverse)
+library(readr)
+library(stargazer)
+```
+
+```{r, echo=F}
+# Actually reading the csvs
+census <- read_csv("hh census tracts.csv")
+regions <- read_csv("hh regions.csv")
+cities <- read_csv("hh cities.csv")
+zipcodes <- read_csv("hh zipcodes.csv")
+counties <- read_csv("hh counties.csv")
+
+```
