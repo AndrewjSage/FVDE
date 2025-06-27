@@ -1,0 +1,183 @@
+---
+title: "Milestone 1 - Binh"
+author: vub23
+format: pdf
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+
+```
+
+For this milestone project, we will only calculate z-scores of humane housing variables at the zipcode level. The files were obtained from the website, options like variable descriptions were not selected. 2 variables were omitted from the dataset, due to the lack of observations for most of the zipcodes in the dataset. The code to this file is attached in the commit to the repo.
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("hh zipcodes.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+hh <- read.csv("hh zipcodes.csv", skip = 2, header = FALSE)
+names(hh) <- colnames
+hh <- hh %>% select(-Layer, -Name)
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-PGS_2024, -HCP_2023) %>% na.omit() 
+hhSumm <- hh %>% select(-GEOID) 
+```
+
+## Exploratory Plots and Tables
+
+### Corrplot:
+
+```{r, fig.width=10, fig.height=10}
+
+A = cor(hhCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Observations:
+
+-   No strong signs of multicollinearity.
+
+-   Variables related to housing costs show covariance: median house values and median house prices are understandably linked, and the link between these variables and rent or mortgage costs are also easily explained.
+
+-   `HBU`, `HBS` and `RBS` are variables related to the proportion of the population under housing cost burden with different cutoffs. The link between them are also easily explicable.
+
+-   Home owner occupation (`HUO`) has a strong negative correlation with demographic diversity and neighborhood walkability. Different zipcodes might have systemically different socioeconomic outcomes and demographics.
+
+\newpage
+
+### Histograms
+
+```{r, fig.width=12, fig.height=9}
+vars <- c("APR_2023", "EJV_2024", "EKW_2024",     
+  "EVR_2018", "HBS_2019.2023", "HBU_2019.2023",
+  "HUO_2019.2023", "MHC_2019.2023", "RBS_2019.2023",
+  "RBU_2019.2023", "REX_2019.2023", "RFM_2025.02",
+  "RNT_2019.2023", "SLA.S_2019.2023","TRV_2019.2023",
+  "VAL_2019.2023")
+
+plots <- map(vars, ~ ggplot(hh, aes_string(.x)) +
+               geom_histogram(fill="steelblue", color="darkgrey", bins=20) +
+               labs(title = .x, x = NULL, y = "Count"))
+
+wrap_plots(plots, ncol = 6, nrow = 3)
+```
+
+Observations:
+
+-   Right-tailed distribution of eviction rates: some neighborhoods see much higher eviction rates than others in the dataset.
+
+-   Interest and rent rates are relatively normally distributed
+
+-   Variables related to housing costs, house values are predictably right-tailed as well.
+
+-   `HBU` shows a right-tailed distribution, while `HBS` is much less so.
+
+\newpage
+
+### Summary Statistics:
+
+```{r, results='asis'}
+# Stargazer just makes the best tables
+stargazer(hhSumm, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+\newpage
+
+## Normalization and Z-score calculations
+
+To ensure effectiveness, we would need to perform some transformations of the variables. Higher values would indicate better/more positive outcomes. Below is the entire list of variables that are negated or transformed and some motivation behind why:
+
+-   `EJV_2024` indicates vulnerable demographic index - a higher number would generally imply higher vulnerability, and hence, should be negated.
+
+-   `EVR_2018`: high eviction rates generally imply less stability and a less desirable outcome for human housing.
+
+-   `HBS`, `HBU`, `RBS`, `RBU` are variables measuring the proportion of the population under duress from housing costs or rent. Higher values are less desirable, and hence should be negated.
+
+-   `HCP_2023`: usage of housing choice vouchers indicates need or general socioeconomic pressures. However, higher estimates might also imply higher access to safe and fair housing. Current decision is to negate this variable (implies extreme poverty)
+
+-   `MHC`, `RFM`, `RNT` and `VAL` are variables related to the costs of purchasing or renting housing, and so even though some arguments can be made about these variables reflecting the standard of living across zipcodes, the current decision is to negate these variables as well. Additionally, taking the natural log of these variables before negating them **might** make our index more informative, noting the number of outliers to the right of the respective histograms.
+
+-   `SLA-S` is the proportion of elders living alone. From the lens of social-support structures (or lack thereof), higher values would indicate more isolated seniors and of a less desirable outcome.
+
+-   `TRV_2019-2023` is the average commute time. Higher values indicate longer commutes, which have been shown to negatively affect quality of life.
+
+```{r}
+# Variables to flip:
+flipVars <- c("EJV_2024", "EVR_2018", "HBS_2019.2023", "HBU_2019.2023",
+  "MHC_2019.2023", "RBS_2019.2023", "RBU_2019.2023", "RFM_2025.02",
+  "RNT_2019.2023", "SLA.S_2019.2023", "TRV_2019.2023", "VAL_2019.2023")
+
+# across(all_of()) is my new favorite thing ever
+#.x points to the current column in the new column name vector
+hhNorm <- hh %>% mutate(across(all_of(flipVars), ~ - .x))
+
+# z score calculations, miraculous formula
+hhNorm <- hhNorm %>%
+  mutate(across(all_of(names(.)),
+                ~ ( .x - mean(.x, na.rm = TRUE) ) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) %>% select(-z_GEOID)
+```
+
+## Aggregation and Visualization
+
+### Aggregation
+
+The current approach is just to average out all of the z-scores, possibly with removal of 2 variables that aren't widely applicable across the dataset and other N/A cases. I have taken AI code for this section, because I was unfamiliar with `rowwise()` operations.
+
+Future directions might include more elaborate weightings of the variables in the average. PCA should also be considered here. Most aggregated values are between -0.5 and 0.5, which might imply either there is not much variability between zipcodes in terms of humane housing (similar policies, laws, geographies,...) or we need to find better ways to aggregate z-scores.
+
+\newpage
+
+```{r}
+zscores <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
+
+# Command taken from AI
+hhNorm <- hhNorm %>% rowwise() %>% mutate(housingIndex = mean(c_across(all_of(zscores)), na.rm = TRUE)) %>%
+  ungroup()
+
+hhFinal <- hhNorm %>% select(GEOID, housingIndex)
+
+```
+
+### Visualization
+
+Though a clustered bargraph centered at 0 might seem tempting, it does not relay much relevant information. I will create a map of the zipcodes, through `tigris` and `ggplot`:
+
+```{r, fig.width=10, fig.height=10}
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hhFinal$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+hhFinal <- hhFinal %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+hhFinal <- hhFinal %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = hhFinal, aes(fill = housingIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+```
