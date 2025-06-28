@@ -16,7 +16,7 @@ library(sf)
 library(factoextra)
 ```
 
-I guess we are calling these milestone projects? Well in any case I'll be doing what Binh did but for the lifelong learning ballsset. 
+I guess we are calling these milestone projects? Well in any case I'll be doing what Binh did but for the lifelong learning ballsset. Also looking into PCA a bit but erm 
 
 ```{r}
 # getting the balls into readable format
@@ -28,8 +28,8 @@ names(balls) <- colnames
 balls <- balls |> select(-Layer, -Name) # removing redundant columns
 
 # Wrangled ballsframes for other visualizations
-ballsCorr <- balls |> select(-FVDEWVAR_2023.2024, -FVDEYLCV_2024.2025) |> na.omit()
-ballsCorr1 <- balls |> na.omit()
+ballsCorr <- balls |> select(-FVDEWVAR_2023.2024, -FVDEYLCV_2024.2025, -GEOID, -Longitude, -Latitude, -Population) |> na.omit()
+ballsCorr1 <- balls |> select(-GEOID, -Longitude, -Latitude, -Population) |> na.omit()
 
 ballsSumm <- balls |> select(-GEOID)
 ```
@@ -73,16 +73,25 @@ balls interpretation or something??
 ### PCA?? omg!!!
 
 ```{r}
-# Use R's built in PCA function to perform PCA on the ballsset
-pca_result <- prcomp(ballsCorr, scale. = TRUE)
-fviz_eig(pca_result) # Visualize the number of dominating eigenvalues
+library("FactoMineR")
+res.pca <- PCA(ballsCorr1,ncp=7)
+
+fviz_eig(res.pca, addlabels=TRUE)
 ```
 
-There are probably some other functions I can use but idgaf rn
+```{r}
+var <- get_pca_var(res.pca)
+head(var$cor)
+```
+
+```{r}
+get_eigenvalue(res.pca)
+```
+
 
 ### Histograms
 
-```{r, fig.width=12, fig.height=4}
+```{r, fig.width=9, fig.height=4}
 vars <- c("EDA_2019.2023", "EDB_2019.2023", "EDC_2019.2023" ,"EDE_2019.2023", "EDG.X341_2019.2023", "FVDEWVAR_2023.2024", "FVDEYLCV_2024.2025")
 
 plots <- map(vars, ~ ggplot(data=balls, aes_string(.x)) + #idk wtf .x is ok dont talk to me
@@ -90,3 +99,20 @@ plots <- map(vars, ~ ggplot(data=balls, aes_string(.x)) + #idk wtf .x is ok dont
 
 wrap_plots(plots, ncol = 4, nrow = 2)
 ```
+
+### Summary statistics
+
+```{r, results='asis'}
+stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+## Normalization and Z-Score Calculations
+
+I want to start transforming data so I can do the z-score calculations and indexing, but the correlation between the `EDX` variables are quite high, so maybe it doesn't make sense to do them all.
+
+```{r}
+#piss in mouth
+```
+
+ctrl+alt+i
+
