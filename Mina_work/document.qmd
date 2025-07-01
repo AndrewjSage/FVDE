@@ -140,6 +140,38 @@ meanIndex <- data.frame('GEOID'=ballsIndex[,1], Index=rowMeans(ballsIndex[,-1], 
 head(meanIndex)
 ```
 
+To visualize the indexes, we can create a map with them.
+
+```{r, fig.width=10, fig.height=10}
+meanIndex <- data.frame('GEOID'=ballsIndex[,1], Index=rowMeans(ballsIndex[,-1], na.rm=TRUE))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(meanIndex$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+meanIndex <- meanIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+meanIndex <- meanIndex %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = meanIndex, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index (mean) by Zipcode") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
 We can also compute an index by averaging the z-scores, so they will be more centered around 0.
 
 ```{r}
@@ -147,7 +179,40 @@ zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.r
 head(zscoreIndex)
 ```
 
+Again, we can draw a map to visualize this.
+
+```{r, fig.width=10, fig.height=10}
+zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(zscoreIndex$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+zscoreIndex <- zscoreIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+zscoreIndex <- zscoreIndex %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = zscoreIndex, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index (z-score) by Zipcode") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
 Cool.
+
 
 
 ctrl+alt+i
