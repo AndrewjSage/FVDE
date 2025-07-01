@@ -19,10 +19,10 @@ library(factoextra)
 I guess we are calling these milestone projects? Well in any case I'll be doing what Binh did but for the lifelong learning ballsset. Also looking into PCA a bit but erm 
 
 ```{r}
-# getting the balls into readable format
+# getting the data into readable format
 colnames <- names(read.csv("Lifelong-Learning-Zip-Codes.csv",nrows=0))
 
-# balls wrangling blah blah blah
+# data wrangling blah blah blah
 balls <- read.csv("Lifelong-Learning-Zip-Codes.csv", skip=2, header=FALSE)
 names(balls) <- colnames
 balls <- balls |> select(-Layer, -Name) # removing redundant columns
@@ -31,7 +31,7 @@ balls <- balls |> select(-Layer, -Name) # removing redundant columns
 ballsCorr <- balls |> select(-FVDEWVAR_2023.2024, -FVDEYLCV_2024.2025, -GEOID, -Longitude, -Latitude, -Population) |> na.omit()
 ballsCorr1 <- balls |> select(-GEOID, -Longitude, -Latitude, -Population) |> na.omit()
 
-ballsSumm <- balls |> select(-GEOID)
+ballsSumm <- balls |> select(-GEOID, -Longitude, -Latitude)
 ```
 
 ## Legend
@@ -103,15 +103,26 @@ wrap_plots(plots, ncol = 4, nrow = 2)
 ### Summary statistics
 
 ```{r, results='asis'}
-stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), notes.append=F, header=F)
 ```
 
 ## Normalization and Z-Score Calculations
 
-I want to start transforming data so I can do the z-score calculations and indexing, but the correlation between the `EDX` variables are quite high, so maybe it doesn't make sense to do them all.
+I want to start transforming data so I can do the z-score calculations and indexing, but the correlation between the `EDX` variables are quite high, so maybe it doesn't make sense to do them all. I'll just do them for now though as a baseline.
+
+The only variable I will flip is the `FVDEWVAR` which corresponds to the number of public school suspensions in K-12, as many would consider a higher number of suspensions to be a bad thing.
 
 ```{r}
-#piss in mouth
+#flipping what needs to be flipped
+flipVars <- c("FVDEWVAR_2023.2024")
+
+ballsNorm <- balls |> mutate(across(all_of(flipVars), ~ - .x))
+
+#z-score calculations wowge
+ballsNorm <- ballsNorm |> 
+  mutate(across(all_of(names(balls)),
+                ~ (.x - mean(.x, na.rm = TRUE)) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) |> select(-z_GEOID, -z_Longitude, -z_Latitude)
 ```
 
 ctrl+alt+i
