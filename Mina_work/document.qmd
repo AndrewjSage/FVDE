@@ -38,6 +38,7 @@ ballsSumm <- balls |> select(-GEOID, -Longitude, -Latitude)
 
 The variable names are terrible so I'll describe them here. I'll give the letters while the corresponding numbers following them are the relevant years.
 
+- `GEOID`: Corresponds with the zip code
 - `EDA`: 9th grade education rate (%)
 - `EDB`: high school graduation rate (%)
 - `EDC`: any higher education rate (%)
@@ -123,7 +124,31 @@ ballsNorm <- ballsNorm |>
   mutate(across(all_of(names(balls)),
                 ~ (.x - mean(.x, na.rm = TRUE)) / sd(.x, na.rm = TRUE), 
                 .names = "z_{.col}")) |> select(-z_GEOID, -z_Longitude, -z_Latitude)
+
+zscore_names <- names(ballsNorm)[startsWith(names(ballsNorm), "z_")] # names of zscore cols
+zscores <- ballsNorm |> select(GEOID, zscore_names)
+head(zscores)
 ```
+
+## Indexing and Visualization
+
+First I will calculate an index for each zip code through a simple average of all the variables. Lowkey this is kinda sus.
+
+```{r}
+ballsIndex <- balls |> select(-Longitude, -Latitude)
+meanIndex <- data.frame('GEOID'=ballsIndex[,1], Index=rowMeans(ballsIndex[,-1], na.rm=TRUE))
+head(meanIndex)
+```
+
+We can also compute an index by averaging the z-scores, so they will be more centered around 0.
+
+```{r}
+zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
+head(zscoreIndex)
+```
+
+Cool.
+
 
 ctrl+alt+i
 
