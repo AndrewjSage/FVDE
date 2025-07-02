@@ -1,5 +1,5 @@
 ---
-title: "Lifelong Learning"
+title: "Lifelong Learning Draft/Work"
 author: mina-cheese
 format: pdf
 ---
@@ -95,10 +95,20 @@ get_eigenvalue(res.pca)
 ```{r, fig.width=9, fig.height=4}
 vars <- c("EDA_2019.2023", "EDB_2019.2023", "EDC_2019.2023" ,"EDE_2019.2023", "EDG.X341_2019.2023", "FVDEWVAR_2023.2024", "FVDEYLCV_2024.2025")
 
-plots <- map(vars, ~ ggplot(data=balls, aes_string(.x)) + #idk wtf .x is ok dont talk to me
-  geom_histogram(fill="#2196f3", color="#000000", bins=20) + labs(title= .x, x=NULL, y="Count"))
+bins_fd <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
 
-wrap_plots(plots, ncol = 4, nrow = 2)
+plots <- map(vars, ~{
+  varname <- .x
+  binwidth <- round(bins_fd(balls[[varname]]))
+  
+  ggplot(data=balls, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(plots, ncol = 4, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
 ```
 
 ### Summary statistics
@@ -164,7 +174,7 @@ zoom_xlim <- c(-89.5, -87.5)
 zoom_ylim <- c(43.5, 45.0)
 
 # Drawing up the map
-ggplot() +
+avg_map <- ggplot() +
   geom_sf(data = meanIndex, aes(fill = Index), color="black") +
   geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
   scale_fill_viridis_c() + 
@@ -203,12 +213,21 @@ zoom_xlim <- c(-89.5, -87.5)
 zoom_ylim <- c(43.5, 45.0)
 
 # Drawing up the map
-ggplot() +
+zs_map <- ggplot() +
   geom_sf(data = zscoreIndex, aes(fill = Index), color="black") +
   geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
   scale_fill_viridis_c() + 
   labs(title = "Lifelong Learning Index (z-score) by Zipcode") +
   theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+zs_map
+```
+
+
+We can put them side by side for easier comparison.
+
+```{r}
+wrap_plots(avg_map, zs_map)
 ```
 
 Cool.
