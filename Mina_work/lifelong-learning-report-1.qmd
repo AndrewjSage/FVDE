@@ -105,7 +105,7 @@ stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n"
 
 ## Normalization and Z-Score Calculations
 
-Because we want larger numbers to correspond to better living, some variable may need to be flipped.
+Because we want larger numbers to correspond to better living, some variables may need to be flipped.
 
 The only variable I will flip is the `FVDEWVAR` which corresponds to the number of public school suspensions in K-12, as many would consider a higher number of suspensions to be a bad thing.
 
@@ -123,7 +123,6 @@ ballsNorm <- ballsNorm |>
 
 zscore_names <- names(ballsNorm)[startsWith(names(ballsNorm), "z_")] # names of zscore cols
 zscores <- ballsNorm |> select(GEOID, zscore_names)
-head(zscores)
 ```
 
 ## Indexing and Visualization
@@ -137,6 +136,8 @@ head(meanIndex)
 ```
 
 ```{r, fig.width=10, fig.height=10}
+# Making the map for the index computed using the simple average
+
 meanIndex <- data.frame('GEOID'=ballsIndex[,1], Index=rowMeans(ballsIndex[,-1], na.rm=TRUE))
 
 # Getting spatial data from tigris, zcta was found from reading the documentation
@@ -174,6 +175,8 @@ head(zscoreIndex)
 ```
 
 ```{r, fig.width=10, fig.height=10}
+# Making the map for the index computed by averaging the z-scores
+
 zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
 
 # Getting spatial data from tigris, zcta was found from reading the documentation
@@ -205,7 +208,7 @@ zs_map <- ggplot() +
 
 I'll use a map to display the indexes, as that seems to convey more meaning with the information. For comparison, I will put the different index calculations side by side.
 
-```{r}
+```{r, fig.width=20, fig.height=10}
 wrap_plots(avg_map, zs_map)
 ```
 
