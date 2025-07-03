@@ -61,7 +61,7 @@ plt = cor(ballsCorr)
 corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-Unsurprisingly, there is a high correlation between the any higher education rate and the college graduation rate (0.84). There also appears to be a high correlation between the high school graduation rate and any higher education rate (0.71).
+Unsurprisingly, there is a high correlation between the any higher education rate `EDC` and the college graduation rate `EDE` (0.84). There also appears to be a high correlation between the high school graduation rate `EDB` and any higher education rate `EDC` (0.71).
 
 Here is the correlation plot including the last two variables. Due to the large number of `NA` entries, the number of rows has been shaved down from 52 to 25.
 
@@ -71,7 +71,7 @@ plt1 = cor(ballsCorr1)
 corrplot(plt1, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-Again, we see a high correlation between the any higher education rate and college graduation rate (0.91). There is also high correlation between the 9th grade graduation rate and high school graduation rate (0.77), high school graduation rate and any higher education rate (0.76), and public school suspensions and public school enrollment (0.78).
+Again, we see a high correlation between the any higher education rate `EDC` and college graduation rate `EDE` (0.91). There is also high correlation between the 9th grade graduation rate `EDA` and high school graduation rate `EDB` (0.77), high school graduation rate `EDB` and any higher education rate `EDC` (0.76), and public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV` (0.78).
 
 ### Histograms
 
@@ -95,12 +95,12 @@ plots <- map(vars, ~{
 wrap_plots(plots, ncol = 4, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
 ```
 
-We can see there is skewedness in some of the variables, like the 9th grade graduation rate, preschool enrollment rate, public school suspensions and public school enrollment. There also appears to be outliers in the high school graduation rate and preschool enrollment.
+We can see there is skewedness in some of the variables, like the 9th grade graduation rate `EDA`, preschool enrollment rate `EDG`, public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`. There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`.
 
 ### Summary statistics
 
 ```{r, results='asis'}
-stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), notes.append=F, header=F)
+stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), font.size = "small", notes.append=F, header=F)
 ```
 
 ## Normalization and Z-Score Calculations
