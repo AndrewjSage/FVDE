@@ -74,14 +74,16 @@ It is worth noting that there is a significant number of `NA` entries in the las
 na_summary <- colSums(is.na(balls)) |> as.data.frame() |> rename('na_count' = 'colSums(is.na(balls))')
 
 na_summary <- na_summary |> mutate("na_percent" = (na_count / 50) * 100)
-kable(na_summary[order(na_summary$na_percent, decreasing=TRUE),])
+kable(na_summary[order(na_summary$na_percent, decreasing=TRUE),], caption="Number and percent of NA entries")
 ```
 
 ## Exploratory Plots and Variables
 
+Here are a few pictures to help us get to know the data a bit.
+
 ### Correlation
 
-Here is the correlation plot with the final two variables omitted. 
+We can look at the correlation between variables. Due to the large number of `NA` entries in some of the variables (i.e. `FWDEWVAR`,`FVDEYLCV`), it may not be worth looking at the data both with and without them. Here is the correlation plot with the final two variables omitted. 
 
 ```{r}
 # Without the last two variables
@@ -103,6 +105,7 @@ Again, we see a high correlation between the any higher education rate `EDC` and
 
 ### Histograms
 
+We can also look at a histogram for each variable.
 
 ```{r, fig.width=9, fig.height=4}
 vars <- c("EDA_2019.2023", "EDB_2019.2023", "EDC_2019.2023" ,"EDE_2019.2023", "EDG.X341_2019.2023", "FVDEWVAR_2023.2024", "FVDEYLCV_2024.2025")
@@ -123,7 +126,9 @@ plots <- map(vars, ~{
 wrap_plots(plots, ncol = 4, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
 ```
 
-We can see there is skewedness in some of the variables, like the 9th grade graduation rate `EDA`, preschool enrollment rate `EDG`, public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`. There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`. Upon closer inspection at the data, the lower high school graduation rate `EDB` corresponds to zip codes 54985 and 54152, while the high preschool enrollment `EDG` also occurs in zip code 54152
+We can see there is skewedness in some of the variables, like the 9th grade graduation rate `EDA`, preschool enrollment rate `EDG`, public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`. For the variables public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`, the skewedness may be explained by the fact that the data is in counts, not percentages. Thus, the value could be reflective of the population of a zip code. It is possible that many zip codes are of similar population except for a handful that have more people. An investigation into the number of residents that would be attending public school at each zip code would be needed to confirm this speculation.
+
+There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`. Upon closer inspection at the data, the lower high school graduation rate `EDB` corresponds to zip codes 54985 and 54152, while the high preschool enrollment `EDG` also occurs in zip code 54152. 
 
 ### Summary statistics
 
@@ -147,7 +152,7 @@ ballsNorm <- balls |> mutate(across(all_of(flipVars), ~ - .x))
 ballsNorm <- ballsNorm |> 
   mutate(across(all_of(names(balls)),
                 ~ (.x - mean(.x, na.rm = TRUE)) / sd(.x, na.rm = TRUE), 
-                .names = "z_{.col}")) |> select(-z_GEOID, -z_Longitude, -z_Latitude)
+                .names = "z_{.col}")) |> select(-z_GEOID, -z_Longitude, -z_Latitude, -z_Population)
 
 zscore_names <- names(ballsNorm)[startsWith(names(ballsNorm), "z_")] # names of zscore cols
 zscores <- ballsNorm |> select(GEOID, zscore_names)
@@ -172,6 +177,8 @@ kable(head(index, 10), caption = "Top 10 indexes (by zipcode)", digits=3)
 kable(tail(index, 10), caption = "Bottom 10 indexes (by zipcode)", digits=3)
 ```
 
+It is worth noting that the variables public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV` are in counts, so larger areas with more people and bigger schools will likely have more enrollment and consequently more suspensions. This is something to consider for the index; because the value is not a percentage, larger areas may get penalized/rewarded disproportionately for their student count/suspension count.
+
 We can display the indexes on a map for an intuitive visualization.
 
 ```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by zip code"}
@@ -193,7 +200,7 @@ zscoreIndex <- zscoreIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(
 
 zscoreIndex <- zscoreIndex %>% st_as_sf()
 
-# Arbitrary limits decided by AI
+# Arbitrary limits decided by ME!!! (so, not arbitrary)
 zoom_xlim <- c(-89.2, -87.8)
 zoom_ylim <- c(43.7, 44.9)
 
@@ -208,4 +215,4 @@ zs_map <- ggplot() +
 zs_map
 ```
 
-We can see pretty clearly that zip code 54313 has the highest lifelong learning index, as shown in bright yellow. In fact, it is the only zip code that has an index higher than 1. On the other hand, while barely visible, the tiny area Winnebago (zip code 54985) has the lowest lifelong learning index of -2.296. Most of the indexes do not go below -1, with a great majority clustering between 0.5 and -0.5. Overall, the lifelong learning index does not seem to vary too much between these zip codes.
+We can see pretty clearly that zip codes 54169 and 54942 have the highest lifelong learning index, as shown in bright yellow. In fact, they are the only zip codes that have an index higher than 1. On the other hand, while barely visible, the tiny area Winnebago (zip code 54985) has the lowest lifelong learning index of -2.668. Most of the indexes do not go below -1, with a great majority clustering between 0.5 and -0.5. Overall, the lifelong learning index does not seem to vary too much between these zip codes.
