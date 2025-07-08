@@ -123,7 +123,7 @@ plots <- map(vars, ~{
 wrap_plots(plots, ncol = 4, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
 ```
 
-We can see there is skewedness in some of the variables, like the 9th grade graduation rate `EDA`, preschool enrollment rate `EDG`, public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`. There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`.
+We can see there is skewedness in some of the variables, like the 9th grade graduation rate `EDA`, preschool enrollment rate `EDG`, public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`. There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`. Upon closer inspection at the data, the lower high school graduation rate `EDB` corresponds to zip codes 54985 and 54152, while the high preschool enrollment `EDG` also occurs in zip code 54152
 
 ### Summary statistics
 
@@ -174,7 +174,7 @@ kable(tail(index, 10), caption = "Bottom 10 indexes (by zipcode)", digits=3)
 
 We can display the indexes on a map for an intuitive visualization.
 
-```{r, fig.width=10, fig.height=10}
+```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by zip code"}
 # Making the map for the index computed by averaging the z-scores
 
 zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
@@ -194,18 +194,18 @@ zscoreIndex <- zscoreIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(
 zscoreIndex <- zscoreIndex %>% st_as_sf()
 
 # Arbitrary limits decided by AI
-zoom_xlim <- c(-89.5, -87.5)
-zoom_ylim <- c(43.5, 45.0)
+zoom_xlim <- c(-89.2, -87.8)
+zoom_ylim <- c(43.7, 44.9)
 
 # Drawing up the map
 zs_map <- ggplot() +
   geom_sf(data = zscoreIndex, aes(fill = Index), color="black") +
   geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
   scale_fill_viridis_c() + 
-  labs(title = "Lifelong Learning Index (z-score) by Zipcode") +
+  labs(title = "Lifelong Learning Index") +
   theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
 
 zs_map
 ```
 
-insert cool and profound analysis
+We can see pretty clearly that zip code 54313 has the highest lifelong learning index, as shown in bright yellow. In fact, it is the only zip code that has an index higher than 1. On the other hand, while barely visible, the tiny area Winnebago (zip code 54985) has the lowest lifelong learning index of -2.296. Most of the indexes do not go below -1, with a great majority clustering between 0.5 and -0.5. Overall, the lifelong learning index does not seem to vary too much between these zip codes.
