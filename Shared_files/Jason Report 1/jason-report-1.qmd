@@ -15,6 +15,7 @@ library(patchwork)
 library(tigris)
 library(sf)
 library(factoextra)
+library(kableExtra)
 ```
 
 # Indroduction
@@ -69,7 +70,10 @@ The variables covered in the dataset are presented below. I'll give the letters 
 It is worth noting that there is a significant number of `NA` entries in the last two variables.
 
 ```{r}
-sum(is.na(balls))
+# Create a df with the number of na entries for each variable
+na_summary <- colSums(is.na(balls)) |> as.data.frame() |> rename('na_count' = 'colSums(is.na(balls))')
+
+na_summary |> mutate((na_count / 50) * 100) |> rename('na_percent'='(na_count/50) * 100')
 ```
 
 ## Exploratory Plots and Variables
