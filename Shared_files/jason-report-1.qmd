@@ -1,0 +1,38 @@
+---
+title: "First Report idk"
+author: "mina-cheese & bob"
+format: pdf
+---
+
+```{r setup, include=F}
+# Add packages you want here bru
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+```
+
+# Indroduction
+
+we gonna talk about hh and ll at the zip code level. idk what else to tell you thats it
+
+
+
+
+
+
+# Humane Housing
+
+insert binh thing
+
+
+
+
+# Lifelong Learning
+
+pluh
