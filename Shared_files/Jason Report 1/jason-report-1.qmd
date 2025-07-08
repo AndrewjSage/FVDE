@@ -73,7 +73,8 @@ It is worth noting that there is a significant number of `NA` entries in the las
 # Create a df with the number of na entries for each variable
 na_summary <- colSums(is.na(balls)) |> as.data.frame() |> rename('na_count' = 'colSums(is.na(balls))')
 
-na_summary |> mutate((na_count / 50) * 100) |> rename('na_percent'='(na_count/50) * 100')
+na_summary <- na_summary |> mutate("na_percent" = (na_count / 50) * 100)
+kable(na_summary[order(na_summary$na_percent, decreasing=TRUE),])
 ```
 
 ## Exploratory Plots and Variables
@@ -90,7 +91,7 @@ corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black'
 
 Unsurprisingly, there is a high correlation between the any higher education rate `EDC` and the college graduation rate `EDE` (0.84). There also appears to be a high correlation between the high school graduation rate `EDB` and any higher education rate `EDC` (0.71).
 
-Here is the correlation plot including the last two variables. Due to the large number of `NA` entries, the number of rows has been shaved down from 52 to 25.
+Here is the correlation plot including the last two variables. Due to the large number of `NA` entries, the number of rows has been shaved down from 50 to 25.
 
 ```{r}
 # With the last two variables
@@ -154,11 +155,21 @@ zscores <- ballsNorm |> select(GEOID, zscore_names)
 
 ## Indexing and Visualization
 
-We can also compute an index by averaging the z-scores, so they will be more centered around 0.
+We move on to the indexing process for our dataset. Here, we simply compute the z-scores for each of the variables and take an average. Perhaps there is more to experiment on with weights, but we leave that to another day.
+
+The following tables display the z-scores of the concerned variables as well as the index by zip code. They include the 10 zip codes with the highest index and the 10 zip codes with the lowest index.
 
 ```{r}
 zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
-head(zscoreIndex)
+index <- zscores |> left_join(zscoreIndex, by = "GEOID") |> arrange(desc(Index))
+
+# Top 10 zscores
+kable(head(index, 10), caption = "Top 10 indexes (by zipcode)", digits=3)
+```
+
+```{r}
+# Bottom 10 zscores
+kable(tail(index, 10), caption = "Bottom 10 indexes (by zipcode)", digits=3)
 ```
 
 We can display the indexes on a map for an intuitive visualization.
@@ -196,3 +207,5 @@ zs_map <- ggplot() +
 
 zs_map
 ```
+
+insert cool and profound analysis
