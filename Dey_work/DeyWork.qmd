@@ -1,0 +1,303 @@
+---
+title: "DeyWork"
+format:
+  pdf:
+    documentclass: article
+    include-in-header:
+      text: |
+        \usepackage[margin=0.75in]{geometry}
+
+---
+
+As a Disclaimer, much of the code for this first draft is from Binh and Mina's work. Thanks Binh and Mina!
+```{r}
+library(tidyverse)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(corrplot)
+library(tinytex)
+library(purrr)
+library(ggplot2)
+library(rlang)
+library(tidyr)
+```
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 5, fig.width = 7)
+```
+
+
+```{r}
+# read in the csv
+transportationZIP <- read_csv("TransportationZIPCodes.csv") 
+
+```
+
+
+```{r}
+# first look at the dataset
+glimpse(transportationZIP)
+```
+## Short Description of the Variables
+
+GEOID: ZIP code
+
+Population: total number of residents
+
+ACT_2019-2023: % of workers who walk or bike to work
+
+CAR_2019-2023: % of workers who drive alone
+
+PUB_2019-2023: % of workers using public transit
+
+NVC_2019-2023: % of households without a vehicle
+
+TRV_2019-2023: mean travel time to work (minutes)
+
+EKW_2024: Walkability Index
+Longitude, Latitude: spatial coordinates (not used in index)
+
+
+
+```{r}
+# remove first 4 rows 
+transportation <- transportationZIP [-c(1:4), ]
+```
+
+```{r}
+# Name and GEOID columns seem to be Identical 
+
+## Drop the Name column
+transportation <- transportation %>% select(-Name)
+```
+
+```{r}
+
+# 2. Convert some columns to numeric
+num_cols <- c(
+  "GEOID","Population", "Longitude", "Latitude", 
+  "ACT_2019-2023", "CAR_2019-2023", "EKW_2024",
+  "NVC_2019-2023", "PUB_2019-2023", "TRV_2019-2023"
+)
+
+transportation <- transportation %>%
+  mutate(across(all_of(num_cols), ~ as.numeric(.)))
+
+```
+
+```{r}
+# I removed 1 row that contained NA values
+# There was only one row which had NA values for the 54985 ZIP code. This is in the Winnebago Area  
+transportation <- transportation %>% drop_na()
+```
+
+## Summary Statistics
+```{r}
+
+summary_stats <- transportation %>%
+  # Convert all character columns to numeric safely
+  mutate(across(where(is.character), ~ suppressWarnings(as.numeric(.x)))) %>%
+  select(-Layer, -GEOID, -Longitude, -Latitude) %>%
+  summarise(across(
+    everything(),
+    list(
+      count  = ~ sum(!is.na(.x)),
+      mean   = ~ mean(.x, na.rm = TRUE),
+      median = ~ median(.x, na.rm = TRUE),
+      sd     = ~ sd(.x, na.rm = TRUE),
+      min    = ~ min(.x, na.rm = TRUE),
+      max    = ~ max(.x, na.rm = TRUE),
+      p25    = ~ quantile(.x, 0.25, na.rm = TRUE),
+      p75    = ~ quantile(.x, 0.75, na.rm = TRUE)
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  
+  # Split only at the LAST underscore using regex
+  pivot_longer(
+    cols = everything(),
+    names_to = c("Variable", "Statistic"),
+    names_pattern = "^(.*)_(\\w+)$",
+    values_to = "Value"
+  ) %>%
+  pivot_wider(names_from = Statistic, values_from = Value)
+
+# Display clean summary table
+summary_stats %>%
+  kable(caption = "Summary statistics for transportation indicators", digits = 2, booktabs = TRUE) %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+
+```
+
+## Histograms
+
+```{r histograms, fig.cap="Histograms of transportation variables"}
+
+# Variables to plot (in quotes exactly as they appear in the data)
+vars <- c("ACT_2019-2023", "CAR_2019-2023", "PUB_2019-2023",
+          "NVC_2019-2023", "TRV_2019-2023", "EKW_2024")
+
+# Plot histograms using patchwork layout
+wrap_plots(
+  map(vars, function(v) {
+    ggplot(transportation, aes(x = .data[[v]])) +
+      geom_histogram(bins = 15, fill = "#3182bd", color = "black") +
+      labs(title = v, x = NULL, y = "Count") +
+      theme_minimal(base_size = 10)
+  }),
+  ncol = 3
+)
+
+```
+
+ACT_2019-2023 (active transportation) is right-skewed, indicating that most ZIP codes have very low rates of walking/biking to work.
+
+CAR_2019-2023 shows a tight, slightly left-skewed distribution, meaning most areas have high levels of car usage.
+
+PUB_2019-2023 is highly right-skewed: public transit use is nearly zero in most areas.
+
+NVC_2019-2023 (no vehicle) and TRV_2019-2023 (commute time) are moderately skewed.
+
+EKW_2024 (walkability) is fairly normal, with most ZIP codes clustered around the median but some with higher walkability.
+
+Insight: Some variables (like public transit) may be more informative in only a few ZIP codes, suggesting that weighting or transformation may be necessary to prevent them from distorting the index.
+
+## Correlation Matrix
+```{r corr-matrix, fig.cap="Correlation Matrix of Indicators"}
+corr_data <- transportation %>%
+  select(
+    `ACT_2019-2023`, `CAR_2019-2023`, `PUB_2019-2023`,
+    `NVC_2019-2023`, `TRV_2019-2023`, EKW_2024
+  ) %>%
+  mutate(across(everything(), as.numeric))
+
+corrplot(
+  cor(corr_data, use = "pairwise.complete.obs"),
+  method = "color", type = "upper",
+  order = "AOE", addCoef.col = "black")
+```
+
+The correlation matrix shows a strong positive relationship between non-vehicle commuting (NVC) and active transportation (ACT) (r = 0.65), suggesting that areas with more biking/walking also tend to have higher non-car commuting.
+
+Walkability (EKW_2024) is moderately correlated with NVC (r = 0.54) and public transportation use (PUB) (r = 0.50), supporting the idea that walkable areas facilitate alternative commuting methods.
+
+Travel time (TRV) is negatively correlated with walkability (r = -0.61) and public transit use (r = -0.42), suggesting that more walkable, transit-friendly areas may reduce commute durations.
+
+Car commuting (CAR) shows expected negative correlations with ACT (r = -0.39) and NVC (r = -0.31), reinforcing that higher car reliance is associated with lower use of alternative modes.
+
+These results indicate redundancy between ACT, NVC, and walkability, which should be considered when selecting and weighting variables for index construction.
+
+\newpage
+
+## Z Scores & Index Construction
+
+```{r}
+# Flip direction so that larger = "better"
+trans_good <- transportation %>% 
+  mutate(
+    across(
+      c(`CAR_2019-2023`, `NVC_2019-2023`, `TRV_2019-2023`),
+      ~ -.x                     # negate “bad-when-high” vars
+    )
+  )
+
+
+```
+
+```{r}
+#Standardise to z-scores
+score_vars <- c("ACT_2019-2023","CAR_2019-2023","PUB_2019-2023",
+                "NVC_2019-2023","TRV_2019-2023","EKW_2024")
+
+trans_z <- trans_good %>% 
+  mutate(across(all_of(score_vars),
+                ~ (as.numeric(.x) - mean(as.numeric(.x), na.rm = TRUE)) /
+                  sd(as.numeric(.x), na.rm = TRUE),
+                .names = "{.col}"))
+
+
+```
+
+```{r}
+# Equal-weight composite index
+index_tbl <- trans_z %>% 
+  mutate(Index = rowMeans(select(., all_of(score_vars)), na.rm = TRUE)) %>% 
+  arrange(desc(Index))
+
+
+```
+
+
+```{r}
+# Table of z-scores + index
+index_tbl %>% 
+  select(GEOID, all_of(score_vars), Index) %>% 
+  kable(caption = "Z-scores and equal-weight transportation index",
+        digits = 2, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE, position = "center", font_size = 9)
+
+
+```
+
+```{r fig.cap="Composite Transportation Index (equal weights)"}
+# Bar plot of index scores 
+ggplot(index_tbl, aes(x = reorder(GEOID, Index), y = Index)) +
+  geom_col(fill = "#31a354") +
+  coord_flip() +
+  labs(x = "ZIP code", y = "Index (z-score units)") 
+```
+As Binh said this plot does not give very meaningful insights but we can still take a look at it.
+54901, 54911, and 54927 have the highest index scores, suggesting strong performance across variables like active transport, walkability, and low car use.
+54152, 54980, and 54170 rank lowest, indicating poor transportation diversity or infrastructure.
+
+
+# Map
+```{r qtransport-map, fig.width=10, fig.height=10, fig.cap="ZIP codes ranked by composite transportation index"}
+
+# Adapted from Binh's humane-housing map code. Thank you Binh!
+
+library(tigris)   # spatial ZIP shapes
+library(sf)       # simple-features ops
+library(ggplot2)  # plotting
+options(tigris_use_cache = TRUE, tigris_class = "sf")
+
+# Pull WI ZIP polygons
+zips_needed <- unique(index_tbl$GEOID)
+wi_zctas     <- zctas(state = "wi", class = "sf", year = 2010, progress_bar = FALSE)
+
+map_zips  <- wi_zctas %>% 
+  mutate(ZIP = as.character(ZCTA5CE10)) %>% 
+  filter(ZIP %in% zips_needed)
+
+background <- wi_zctas %>% 
+  mutate(ZIP = as.character(ZCTA5CE10)) %>% 
+  filter(!ZIP %in% zips_needed)
+
+# Join index scores to spatial layer
+transport_sf <- index_tbl %>% 
+  mutate(GEOID = as.character(GEOID)) %>% 
+  left_join(map_zips, by = c("GEOID" = "ZIP")) %>% 
+  st_as_sf()
+
+# Plot
+zoom_xlim <- c(-89.5, -87.5)   # same crop Binh used
+zoom_ylim <- c(43.5, 45.0)
+
+
+# Added text with the zip codes, some dont align perfectly but i thought this is helpfull
+ggplot() +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  geom_sf(data = transport_sf, aes(fill = Index), color = "black") +
+  geom_sf_text(data = transport_sf, aes(label = GEOID), size = 2.5, color = "white")+
+  scale_fill_viridis_c(name = "Index") +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE) + 
+  labs(title = "Composite Transportation Index by ZIP Code") +
+  theme_minimal()
+```
+
+High-scoring ZIPs are concentrated in urban centers (e.g., Oshkosh, Appleton).
+Lower scores dominate in rural or exurban areas, consistent with lower population density, fewer sidewalks, and car dependency.
+
