@@ -1,0 +1,268 @@
+---
+title: "Milestone 2 - Binh"
+author: vub23
+format: pdf
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+```
+
+For this milestone project, we will test different ways to calculate the humane housing index and find ways to effectively visualize them. Assumptions made in the process of creating milestone 1 would also hold for this one (e.g. the same variables are negated to ensure that higher values are better). The code to this file is attached in the commit to the repo.
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("hh zipcodes.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+hh <- read.csv("hh zipcodes.csv", skip = 2, header = FALSE)
+names(hh) <- colnames
+hh <- hh %>% select(-Layer, -Name)
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-PGS_2024, -HCP_2023) %>% na.omit() 
+hhSumm <- hh %>% select(-GEOID) 
+```
+
+## Simple Z-score average
+
+### Corrplot:
+
+```{r, fig.width=10, fig.height=10}
+
+A = cor(hhCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+### Map for Simple Average Index:
+
+```{r}
+# Variables to flip:
+flipVars <- c("EJV_2024", "EVR_2018", "HBS_2019.2023", "HBU_2019.2023",
+  "MHC_2019.2023", "RBS_2019.2023", "RBU_2019.2023", "RFM_2025.02",
+  "RNT_2019.2023", "SLA.S_2019.2023", "TRV_2019.2023", "VAL_2019.2023")
+
+# across(all_of()) is my new favorite thing ever
+#.x points to the current column in the new column name vector
+hhNorm <- hh %>% mutate(across(all_of(flipVars), ~ - .x))
+
+# z score calculations, miraculous formula. z scores are created here
+hhNorm <- hhNorm %>%
+  mutate(across(all_of(names(.)),
+                ~ ( .x - mean(.x, na.rm = TRUE) ) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) %>% select(-z_GEOID)
+```
+
+```{r, fig.width=10, fig.height=10}
+zscores <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
+
+# Command taken from AI
+hhNorm <- hhNorm %>% rowwise() %>% mutate(avgIndex = mean(c_across(all_of(zscores)), na.rm = TRUE)) %>%
+  ungroup()
+
+hhFinal <- hhNorm %>% select(GEOID, avgIndex)
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hhFinal$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+hhFinal <- hhFinal %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+hhFinal <- hhFinal %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+avgPlot <- ggplot() +
+  geom_sf(data = hhFinal, aes(fill = avgIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+```
+
+## PCA?
+
+Some disclaimers/decisions:
+
+1.  A big part of the code for this section was created by AI due to my unfamiliarity with the commands required to perform PCA in R.
+
+2.  I have (effectively) chosen to fill out NA values in the dataset with the mean value of the variable. In other words, `NA` z-scores are now 0 instead. This is to make sure that every zipcode had its own PCA index.
+
+3.  Since a negative loading on some variable indicates that a higher value would decrease our final index, the same negation rules would apply, similar to our first attempt at creating the index. Negation is done BEFORE PCA (as I have sadly discovered).
+
+4.  Moreover, since the loadings do not add up to 1, I had to find a way to "normalize" them so that they are commensurate with the average index.
+
+5.  Comments/suggestions on this chunk is greatly appreciated.
+
+```{r pcaIndex, message=FALSE, warning=FALSE}
+# 1. Pre‐flip & z‐score all numeric vars (except GEOID), then impute Z-NAs→0
+hhLocalZ <- hh %>%
+  mutate(across(all_of(flipVars), ~ - .x)) %>%
+  mutate(
+    across(
+      where(is.numeric) & !matches("GEOID"),
+      ~ (.x - mean(.x, na.rm = TRUE)) / sd(.x, na.rm = TRUE),
+      .names = "z_{.col}"
+    )
+  ) %>%
+  mutate(across(starts_with("z_"), ~ replace_na(.x, 0)))
+
+# 2. Identify the Z-columns
+zCols <- names(hhLocalZ)[startsWith(names(hhLocalZ), "z_")]
+
+# 3. Run PCA on the already-standardized Z’s
+pcaRes <- prcomp(select(hhLocalZ, all_of(zCols)),
+                 center = FALSE, scale. = FALSE)
+
+# 4. Extract raw PC1 loadings
+rawLoadings <- pcaRes$rotation[, 1]
+
+# 5. Absolute‐value normalization so ∑|wᵢ|=1
+absWeights <- abs(rawLoadings) / sum(abs(rawLoadings))
+
+# 6. Print weights table
+weightsTable <- tibble(
+  Variable   = names(rawLoadings),
+  RawLoading = rawLoadings,
+  AbsWeight  = absWeights
+) %>%
+  arrange(desc(AbsWeight))
+
+knitr::kable(
+  weightsTable,
+  caption   = "PC1 Loadings & Abs-Normalized Weights",
+  digits    = 3
+)
+
+# 7. Build the new pcaIndex
+zMat <- as.matrix(select(hhLocalZ, all_of(zCols)))
+pcaScores <- tibble(
+  GEOID    = as.character(hhLocalZ$GEOID),
+  pcaIndex = as.numeric(zMat %*% absWeights)
+)
+
+# 8. Merge into hhFinal
+hhFinal <- hhFinal %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  select(-any_of("pcaIndex")) %>%
+  left_join(pcaScores, by = "GEOID")
+```
+
+Observations: PCA actually reveals:
+
+-   Home ownership (`HUO`) actually explained a big part of the dataset's variability, and so did demographic vulnerability (`EJV`), meriting further investigation.
+
+-   The variables contributing the most to the index are actually ones we are deciding to flip/transform. This implies that establishing a baseline specification with FVDE is necessary.
+
+-   Eviction rates (`EVR`) do not factor that strongly into our PCA index, neither does median housing costs (`MHC`) (or rent (`RNT`).
+
+```{r, fig.width=10, fig.height=7}
+# Chunk for PCA index map creation
+pcaPlot <- ggplot() +
+  geom_sf(data = hhFinal, aes(fill = pcaIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by PCA Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+wrap_plots(avgPlot, pcaPlot)
+```
+
+### Ranking Table:
+
+-   To further illustrate the difference between the 2 indices, I will create a table containing the 2 averages, the rank of each zipcode according to each index, and how much a zipcode changes in ranks when alternating between the 2 weight sets:
+
+```{r}
+# Compute ranks for avgIndex and pcaIndex, then the shift (delta)
+rankedTable <- hhFinal %>%
+  mutate(rankAvg = dense_rank(desc(avgIndex)),
+    rankPca = dense_rank(desc(pcaIndex)),
+    rankShift = rankAvg - rankPca) %>%
+  select(GEOID, avgIndex, pcaIndex,
+    rankAvg, rankPca, rankShift) %>% st_drop_geometry() %>% 
+  arrange(desc(rankShift))
+
+# Print the comparison table
+knitr::kable(rankedTable,
+  caption = "Rank Comparison: Average Index vs. PCA Index",
+  digits  = 3,
+  col.names = c(
+    "ZIP Code",
+    "Average Index",
+    "PCA Index",
+    "Rank (Avg)",
+    "Rank (PCA)",
+    "Δ Rank"))
+```
+
+## Personal Weighting/Expert Weighting/...
+
+```{r}
+# 1. Define the three pillars
+pillarAccess       <- c("z_APR_2023",      "z_EJV_2024",
+                        "z_EVR_2018",      "z_HCP_2023",
+                        "z_HUO_2019.2023")
+pillarAffordability<- c("z_HBS_2019.2023", "z_HBU_2019.2023",
+                        "z_RBS_2019.2023", "z_RBU_2019.2023",
+                        "z_MHC_2019.2023", "z_RNT_2019.2023",
+                        "z_RFM_2025.02",   "z_VAL_2019.2023")
+pillarNeighborhood <- c("z_EKW_2024",      "z_PGS_2024",
+                        "z_REX_2019.2023", "z_SLA.S_2019.2023",
+                        "z_TRV_2019.2023")
+
+# 2. Assign pillar‐level weights (must sum to 1)
+pillarWeights <- c(
+  AccessStability = 0.30,
+  Affordability   = 0.40,
+  Neighborhood    = 0.30
+)
+
+# 3. Distribute each pillar's share equally among its variables
+wExpert <- c(
+  rep(pillarWeights["AccessStability"] / length(pillarAccess),       length(pillarAccess)),
+  rep(pillarWeights["Affordability"]   / length(pillarAffordability),length(pillarAffordability)),
+  rep(pillarWeights["Neighborhood"]    / length(pillarNeighborhood), length(pillarNeighborhood))
+)
+names(wExpert) <- c(pillarAccess, pillarAffordability, pillarNeighborhood)
+
+# 4. Compute the expertIndex as weighted sum of the flipped+z-scored data (hhNorm)
+expertScores <- hhNorm %>%
+  select(GEOID, all_of(names(wExpert))) %>%
+  mutate(expertIndex = as.numeric(
+    as.matrix(select(., -GEOID)) %*% wExpert
+  )) %>%
+  select(GEOID, expertIndex) %>% mutate(GEOID=as.character(GEOID))
+
+# 5. Merge into hhFinal
+hhFinal <- hhFinal %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  left_join(expertScores, by = "GEOID")
+
+# 6. Display the expert weights
+tibble(
+  variable     = names(wExpert),
+  expertWeight = wExpert
+) %>%
+  arrange(desc(expertWeight)) %>%
+  knitr::kable(
+    caption   = "Expert‐Driven Weights by Pillar",
+    digits    = 3,
+    col.names = c("Variable", "Weight")
+  )
+```

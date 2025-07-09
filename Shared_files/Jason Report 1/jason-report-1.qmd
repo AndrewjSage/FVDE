@@ -1,6 +1,6 @@
 ---
 title: "First Report idk"
-author: "mina-cheese & bob"
+author: "mina-cheese & boob"
 format: pdf
 ---
 
@@ -18,20 +18,233 @@ library(factoextra)
 library(kableExtra)
 ```
 
-# Indroduction
+# Introduction
 
-we gonna talk about hh and ll at the zip code level. idk what else to tell you thats it
-
-
-
-
-
+This report is a short recap of the work we have done since our first meeting. As discussed, we have chosen to cover 2 categories for this report: humane housing and lifelong learning, at the zipcode level. For each category, we will perform some exploratory data analysis, explain our methodologies and create a preliminary index and accompanying visualizations.
 
 # Humane Housing
 
-insert binh thing
+## Legend:
+
+Below is the full list of the variables available on the Data Exchange website related to the Humane Housing topic:
+
+-   `APR` is the mortgage approval rate (given in percentages)
+-   `EJV` is the vulnerable demographic index measured against other zipcodes in the country. A lower value indicates a lower percentage of vulnerable residents.
+-   `EKW` is the walkability index, where higher values indicate higher walkability. `TRV` is the mean travel time to work.
+-   `EVR` is the eviction rate, given in percentages.
+-   `HBS` and `HBU` are percentages of residents under (severe) housing cost burden, or the proportion of residents spending a substantial amount of income on their mortgage. `RBU` and `RBS` are the rent-based version of this measure.
+-   `HCP` is the proportion of renter-occupied housing units acquired through the federal housing choice voucher.
+-   `HUO` is the percentage of housing units owned by their residents.
+-   `MHC` is the median monthly housing cost, all inclusive (bills, rent, mortgage,...). `RNT` is the median rent.
+-   `RFM` is the median home sale price, while `VAL` is the median home value in each respective zipcode.
+-   `SLA-S` is the percentage of seniors living alone in their housing units.
+-   `REX` is the race-ethnicity diversity index, or the probability of two residents in an area belonging to different cultural backgrounds.
+-   `PGS` is the number of supermarkets within the zipcode.
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("hh zipcodes.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+hh <- read.csv("hh zipcodes.csv", skip = 2, header = F)
+names(hh) <- colnames
+hh <- hh %>% select(-Layer, -Name)
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-PGS_2024, -HCP_2023) %>% na.omit() 
+hhSumm <- hh %>% select(-GEOID) 
+```
+
+## Exploratory Plots and Tables
+
+### Summary Statistics
+
+Having given basic variable definitions, we now move on to summary statistics:
+
+```{r, results='asis'}
+statTbl <- hhSumm %>%
+  summarise(across(
+    everything(),
+    list(
+      N      = ~sum(!is.na(.)),
+      Mean   = ~mean(.,   na.rm = T),
+      StDev  = ~sd(.,     na.rm = T),
+      Min    = ~min(.,    na.rm = T),
+      Q1     = ~quantile(., 0.25, na.rm = T),
+      Median = ~median(., na.rm = TRUE),
+      Q3     = ~quantile(., 0.75, na.rm = T),
+      Max    = ~max(.,    na.rm = T),
+      PctNA  = ~mean(is.na(.)) * 100
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    cols       = everything(),
+    names_to   = c("Variable","Statistic"),
+    names_pattern = "(.+)_(.+)"
+  ) %>%
+  pivot_wider(
+    names_from  = Statistic,
+    values_from = value
+  ) %>%
+  relocate(Variable, N, PctNA, Mean, StDev, Min, Q1, Median, Q3, Max) %>%
+  mutate(
+    N     = as.integer(N),
+    PctNA = round(PctNA, 1),
+    across(c(Mean, StDev, Min, Q1, Median, Q3, Max), ~ round(., 3))
+  )
+
+stargazer(statTbl,
+  summary    = F,
+  rownames   = F,
+  type       = "latex",
+  header     = F,
+  float      = F,
+  title      = "",
+  label      = "tab:summary")
+```
+2 variables, the number of groceries stores (`PGS)` and housing voucher usage (`HCP)` are unavailable for most zipcodes.
+
+### Histograms
+
+Another way to visualize the data distribution is through histograms, which are provided below for the numeric variables sans `PGS` and `HCP`:
+
+```{r, fig.width=12, fig.height=10}
+hhvars <- c("APR_2023", "EJV_2024", "EKW_2024",     
+  "EVR_2018", "HBS_2019.2023", "HBU_2019.2023",
+  "HUO_2019.2023", "MHC_2019.2023", "RBS_2019.2023",
+  "RBU_2019.2023", "REX_2019.2023", "RFM_2025.02",
+  "RNT_2019.2023", "SLA.S_2019.2023","TRV_2019.2023",
+  "VAL_2019.2023")
+
+hhbins <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+hhplots <- map(hhvars, ~{
+  varname <- .x
+  binwidth <- round(hhbins(hhSumm[[varname]]))
+  
+  ggplot(data=hhSumm, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(hhplots, ncol = 4, nrow = 4) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+Observations:
+
+-   Right-tailed distribution of eviction rates (`EVR`): some neighborhoods see much higher eviction rates than others in the dataset.
+
+-   Mortgage approval (`APR`) and monthly rent (`RNT`) are relatively normally distributed
+
+-   Variables related to housing costs and house values are predictably right-skewed: one would expect some zipcodes to have much higher house prices or rent rates compared to others (good location, downtowns,...) 
+
+-   `HBU` shows a right-tailed distribution, while `HBS` is much less so.   
+
+### Correlation Plot:
+
+```{r, fig.width=10, fig.height=10}
+
+A = cor(hhCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
 
 
+Observations:
+
+-   Variables related to housing costs show covariance: median house values (`VAL`) and median house prices (`RFM`) are understandably linked, and the link between these variables and rent (`RNT`) or mortgage costs are also easily explained.
+
+-   `HBU`, `HBS`, `RBU`, and `RBS` - variables related to the proportion of the population under housing cost burden with different cutoffs - also show high levels of covariance. The link between them are also understandable: the `HBS` and `RBS` use the same methodology as `HBU` and `RBU`, just with different numeric thresholds.
+
+-   Home owner occupation (`HUO`) has a strong negative correlation with demographic vulnerability (`EJV`) and neighborhood walkability (`EKW`). This is because areas with high levels of home ownership would on average be in better economic conditions, and hence less reliant on walking or public transportation.
+
+
+## Normalization and Z-score calculations
+
+To ensure the informativeness of our proposed indices, we would need to perform some transformations of the variables. This is to ensure that higher values of any variable would indicate a better outcome. Below is the entire list of variables that are negated or transformed and some motivation behind why:
+
+-   `EJV_2024` is the vulnerable demographic index - a higher value implies a greater percentage of vulnerable residents, and hence, should be negated.
+
+-   `EVR_2018`: high eviction rates generally imply less stability and a less desirable outcome for human housing.
+
+-   `HBS`, `HBU`, `RBS`, `RBU` are variables measuring the proportion of the population under duress from housing costs or rent. Higher values are less desirable, and hence should be negated. 
+
+-   `HCP_2023`: usage of housing choice vouchers indicates need or general socioeconomic pressures. However, higher estimates might also imply higher access to safe and fair housing. Current decision is to negate this variable (implies extreme poverty)
+
+-   `MHC`, `RFM`, `RNT` and `VAL` are variables related to the costs of purchasing or renting housing, and so even though some arguments can be made about these variables reflecting the standard of living across zipcodes, the current decision is to negate these variables as well. This decision can be reverted with confirmation 
+
+-   `SLA-S` is the proportion of elders living alone. From the lens of social-support structures (or lack thereof), higher values would indicate more isolated seniors and of a less desirable outcome.
+
+-   `TRV_2019-2023` is the average commute time. Higher values indicate longer commutes, which have been shown to negatively affect quality of life.
+
+```{r}
+# Variables to flip:
+flipVars <- c("EJV_2024", "EVR_2018", "HBS_2019.2023", "HBU_2019.2023",
+  "MHC_2019.2023", "RBS_2019.2023", "RBU_2019.2023", "RFM_2025.02",
+  "RNT_2019.2023", "SLA.S_2019.2023", "TRV_2019.2023", "VAL_2019.2023")
+
+# across(all_of()) is my new favorite thing ever
+#.x points to the current column in the new column name vector
+hhNorm <- hh %>% mutate(across(all_of(flipVars), ~ - .x))
+
+# z score calculations, miraculous formula
+hhNorm <- hhNorm %>%
+  mutate(across(all_of(names(.)),
+                ~ ( .x - mean(.x, na.rm = TRUE) ) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) %>% select(-z_GEOID)
+```
+
+## Aggregation and Visualization
+
+### Aggregation
+```{r}
+zscores <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
+
+# Command taken from AI
+hhNorm <- hhNorm %>% rowwise() %>% mutate(housingIndex = mean(c_across(all_of(zscores)), na.rm = TRUE)) %>%
+  ungroup()
+
+hhFinal <- hhNorm %>% select(GEOID, housingIndex)
+
+```
+
+The current approach is to average all of the available z-scores.
+
+### Visualization
+
+Below is a map containing the humane housing index for all of the zipcodes:
+
+```{r, fig.width=10, fig.height=10}
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hhFinal$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+hhFinal <- hhFinal %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+hhFinal <- hhFinal %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = hhFinal, aes(fill = housingIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+```
 
 
 # Lifelong Learning
@@ -58,14 +271,14 @@ ballsSumm <- balls |> select(-GEOID, -Longitude, -Latitude)
 
 The variables covered in the dataset are presented below. I'll give the letters below while the corresponding numbers following them are the relevant years.
 
-- `GEOID`: Corresponds with the zip code
-- `EDA`: 9th grade education rate (%)
-- `EDB`: high school graduation rate (%)
-- `EDC`: any higher education rate (%)
-- `EDE`: college graduation rate (%)
-- `EDG`: preschool enrollment for ages 3-4 (%)
-- `FWDEWVAR`: public school suspensions K-12
-- `FVDEYLCV`: public school enrollment K-12
+-   `GEOID`: Corresponds with the zip code
+-   `EDA`: 9th grade education rate (%)
+-   `EDB`: high school graduation rate (%)
+-   `EDC`: any higher education rate (%)
+-   `EDE`: college graduation rate (%)
+-   `EDG`: preschool enrollment for ages 3-4 (%)
+-   `FWDEWVAR`: public school suspensions K-12
+-   `FVDEYLCV`: public school enrollment K-12
 
 It is worth noting that there is a significant number of `NA` entries in the last two variables.
 
@@ -83,7 +296,7 @@ Here are a few pictures to help us get to know the data a bit.
 
 ### Correlation
 
-We can look at the correlation between variables. Due to the large number of `NA` entries in some of the variables (i.e. `FWDEWVAR`,`FVDEYLCV`), it may not be worth looking at the data both with and without them. Here is the correlation plot with the final two variables omitted. 
+We can look at the correlation between variables. Due to the large number of `NA` entries in some of the variables (i.e. `FWDEWVAR`,`FVDEYLCV`), it may not be worth looking at the data both with and without them. Here is the correlation plot with the final two variables omitted.
 
 ```{r}
 # Without the last two variables
@@ -128,7 +341,7 @@ wrap_plots(plots, ncol = 4, nrow = 2) & plot_annotation(caption="*Note: histogra
 
 We can see there is skewedness in some of the variables, like the 9th grade graduation rate `EDA`, preschool enrollment rate `EDG`, public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`. For the variables public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV`, the skewedness may be explained by the fact that the data is in counts, not percentages. Thus, the value could be reflective of the population of a zip code. It is possible that many zip codes are of similar population except for a handful that have more people. An investigation into the number of residents that would be attending public school at each zip code would be needed to confirm this speculation.
 
-There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`. Upon closer inspection at the data, the lower high school graduation rate `EDB` corresponds to zip codes 54985 and 54152, while the high preschool enrollment `EDG` also occurs in zip code 54152. 
+There also appears to be outliers in the high school graduation rate `EDB` and preschool enrollment `EDG`. Upon closer inspection at the data, the lower high school graduation rate `EDB` corresponds to zip codes 54985 and 54152, while the high preschool enrollment `EDG` also occurs in zip code 54152.
 
 ### Summary statistics
 
