@@ -475,12 +475,12 @@ zscores <- ballsNorm |> select(GEOID, zscore_names)
 
 We move on to the indexing process for our dataset. Here, we simply compute the z-scores for each of the variables and take an average in the same manner as we did for the humane housing condition. There are seven variables (as described previously), and therefore seven z-scores. Perhaps there is more to experiment on with weights, but we leave that to another day.
 
-The following tables display the z-scores of the concerned variables as well as the index by zip code. They include the 10 zip codes with the highest index and the 10 zip codes with the lowest index. Please note that when a zip code has a missing value, that variable is not included in the average (for that zip code).
+The following tables display the z-scores of the concerned variables in the lifelong learning dataset as well as the index by zip code. They include the 10 zip codes with the highest index and the 10 zip codes with the lowest index. Please note that when a zip code has a missing value, that variable is not included in the average (for that zip code).
 
 ```{r}
 zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
 index <- zscores |> left_join(zscoreIndex, by = "GEOID") |> arrange(desc(Index))
-names(index)[2:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "FVDEWVAR", "FVDEYLCV")
+names(index)[2:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV")
 
 # Top 10 zscores
 kable(head(index, 10), caption = "Top 10 indexes (by zipcode)", digits=3)
@@ -491,7 +491,7 @@ kable(head(index, 10), caption = "Top 10 indexes (by zipcode)", digits=3)
 kable(tail(index, 10), caption = "Bottom 10 indexes (by zipcode)", digits=3)
 ```
 
-It is worth noting that the variables public school suspensions `FVDEWVAR` and public school enrollment `FVDEYLCV` are in counts, so larger areas with more people and bigger schools will likely have more enrollment and consequently more suspensions. This is something to consider for the index; because the value is not a percentage, larger areas may get penalized/rewarded disproportionately for their student count/suspension count.
+It is worth noting that the variables public school suspensions `FVDEWVAR` (`WVAR` in the table) and public school enrollment `FVDEYLCV` (`YLCV` in the table) are in counts, so larger areas with more people and bigger schools will likely have more enrollment and consequently more suspensions. This is something to consider for the index; because the value is not a percentage, larger areas may get penalized/rewarded disproportionately for their student count/suspension count.
 
 We can display the indexes on a map for an intuitive visualization.
 
