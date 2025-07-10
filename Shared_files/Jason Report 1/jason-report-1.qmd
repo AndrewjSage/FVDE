@@ -1,7 +1,12 @@
 ---
-title: "First Report (Preliminary Copy)"
+title: "FVDE First Report"
 author: "Mina and Binh"
-format: pdf
+format:
+  pdf:
+    include-in-header:
+      text: |
+        \usepackage{pdflscape}
+        \usepackage{ragged2e}
 ---
 
 ```{r setup, include=F}
@@ -61,15 +66,9 @@ hhSumm <- hh %>% select(-GEOID)
 
 Having given basic variable definitions, we now move on to summary statistics:
 
-
-```{r summaryStats, echo=FALSE, message=FALSE, warning=FALSE}
-library(dplyr)
-library(tidyr)
-library(knitr)
-library(kableExtra)
-
-# 1. Build the statTbl exactly as before
-statTbl2 <- hhSumm %>%
+```{r, results='asis'}
+# 1. Compute the summary table
+statTbl <- hhSumm %>%
   summarise(across(
     everything(),
     list(
@@ -98,22 +97,28 @@ statTbl2 <- hhSumm %>%
   mutate(
     N     = as.integer(N),
     PctNA = round(PctNA, 1),
-    across(c(Mean, StDev, Min, Q1, Median, Q3, Max), ~ round(., 2))
+    across(c(Mean, StDev, Min, Q1, Median, Q3, Max), ~ round(., 3))
   )
 
-# 2. Print with kableExtra
-statTbl2 %>%
-  kable(
+# 2. Print it with kableExtra
+statTbl %>%
+  kbl(
     format    = "latex",
     booktabs  = TRUE,
-    caption   = "Summary Statistics with \\% Missing and IQR",
-    align     = c("l", rep("r", 9))
+    caption   = "Summary Statistics (PctNA = \\% missing)",
+    label     = "tab:summary",
+    align     = c("l", rep("r", 9)),
+    digits    = 3
   ) %>%
   kable_styling(
-    latex_options   = c("scale_down", "hold_position"),
-    font_size       = 7,
-    full_width      = TRUE
+    latex_options   = c("scale_down","hold_position"),
+    font_size       = 8,
+    full_width      = T
   )
+```
+
+```{=latex}
+\justifying\par
 ```
 
 2 variables, the number of grocery stores (`PGS`) and housing voucher usage (`HCP`) are unavailable for most zipcodes.
@@ -152,11 +157,13 @@ Observations:
 
 -   Mortgage approval (`APR`) and monthly rent (`RNT`) are relatively normally distributed
 
--   Variables related to housing costs and house values are predictably right-skewed: one would expect some zipcodes to have much higher house prices or rent rates compared to others (good location, downtowns,...) 
+-   Variables related to housing costs and house values are predictably right-skewed: one would expect some zipcodes to have much higher house prices or rent rates compared to others (good location, downtowns,...)
 
--   `HBU` shows a right-tailed distribution, while `HBS` is much less so.   
+-   `HBU` shows a right-tailed distribution, while `HBS` is much less so.
 
 ### Correlation Plot:
+
+We will explore the correlation between humane housing variables using a correlation plot:
 
 ```{r, fig.width=10, fig.height=10}
 
@@ -164,17 +171,15 @@ A = cor(hhCorr)
 corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-
 Observations:
 
--   Variables related to housing costs show covariance: median house values (`VAL`) and median house prices (`RFM`) are understandably linked, and the link between these variables and rent (`RNT`) or mortgage costs are also easily explained.
+-   Variables related to housing costs show correlation: median house values (`VAL`) and median house prices (`RFM`) are understandably linked, and the link between these variables and rent (`RNT`) or mortgage costs are also easily explained.
 
 -   `HBU`, `HBS`, `RBU`, and `RBS` - variables related to the proportion of the population under housing cost burden with different cutoffs - also show high levels of covariance. The link between them are also understandable: the `HBS` and `RBS` use the same methodology as `HBU` and `RBU`, just with different numeric thresholds.
 
--   Home owner occupation (`HUO`) has a strong negative correlation with demographic vulnerability (`EJV`) and neighborhood walkability (`EKW`). This is because areas with high levels of home ownership would on average be in better economic conditions, and hence less reliant on walking or public transportation.
+-   Home owner occupation (`HUO`) has a strong negative correlation with demographic vulnerability (`EJV`) and neighborhood walkability (`EKW`). This might be because areas with high levels of home ownership would on average be in better economic conditions, and hence less reliant on walking or public transportation.
 
-
-## Normalization and Z-score calculations
+## Normalization
 
 To ensure the informativeness of our proposed indices, we would need to perform some transformations of the variables. This is to ensure that higher values of any variable would indicate a better outcome. Below is the entire list of variables that are negated or transformed and some motivation behind why:
 
@@ -182,11 +187,11 @@ To ensure the informativeness of our proposed indices, we would need to perform 
 
 -   `EVR_2018`: high eviction rates generally imply less stability and a less desirable outcome for human housing.
 
--   `HBS`, `HBU`, `RBS`, `RBU` are variables measuring the proportion of the population under duress from housing costs or rent. Higher values are less desirable, and hence should be negated. 
+-   `HBS`, `HBU`, `RBS`, `RBU` are variables measuring the proportion of the population under duress from housing costs or rent. Higher values are less desirable, and hence should be negated.
 
 -   `HCP_2023`: usage of housing choice vouchers indicates need or general socioeconomic pressures. However, higher estimates might also imply higher access to safe and fair housing. Current decision is to negate this variable (implies extreme poverty)
 
--   `MHC`, `RFM`, `RNT` and `VAL` are variables related to the costs of purchasing or renting housing, and so even though some arguments can be made about these variables reflecting the standard of living across zipcodes, the current decision is to negate these variables as well. This decision can be reverted with confirmation 
+-   `MHC`, `RFM`, `RNT` and `VAL` are variables related to the costs of purchasing or renting housing, and so even though some arguments can be made about these variables reflecting the standard of living across zipcodes, the current decision is to negate these variables as well. This decision can be reverted with confirmation
 
 -   `SLA-S` is the proportion of elders living alone. From the lens of social-support structures (or lack thereof), higher values would indicate more isolated seniors and of a less desirable outcome.
 
@@ -209,10 +214,10 @@ hhNorm <- hhNorm %>%
                 .names = "z_{.col}")) %>% select(-z_GEOID)
 ```
 
-\newpage
-## Aggregation and Visualization
+## Z-score Calculations and Visualizations
 
-### Aggregation
+### Z-score Calculations
+
 ```{r}
 zCols <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
 
@@ -234,13 +239,20 @@ cols <- c(
   "z_HBS_2019.2023")
 
 ```
-The current approach is to average all of the available z-scores.
+
+-   For each variable, we have taken the observed value and subtract the average value over the 50 observations. We then divide the result by the standard deviation of said variable.
+
+-   Though the current calculations rely on summary statistics taken from the dataset (i.e. the values taken from the 50 zipcodes), we aim to utilize the average and standard deviation of the variable across all zipcodes (and commensurate geographic units) in Wisconsin.
+
+-   For this calculation, we have replaced `NA` values with the average of the dataset. In other words, all z-scores for `NA` observations are 0 instead.
+
+-   Finally, all z-scores of numeric variables are averaged across the variables to create a preliminary humane housing index.
 
 ### Visualization
 
 Below is a map containing the humane housing index for all of the zipcodes:
 
-```{r, fig.width=10, fig.height=8}
+```{r, fig.width=10, fig.height=7}
 
 # Getting spatial data from tigris, zcta was found from reading the documentation
 zips <- unique(hhFinal$GEOID)
@@ -270,42 +282,70 @@ ggplot() +
 
 ```
 
-Here are 2 tables containing the top and bottom 10 zipcodes according to our preliminary index:
-```{r, results='asis'}
+Additionally, here are 2 tables containing the top and bottom 10 zipcodes according to our preliminary index:
 
+\newpage
+
+```{=latex}
+\justifying\par
+\begin{landscape}
+```
+
+```{r, echo=FALSE, results='asis', message=FALSE, warning=FALSE}
+
+
+# 1. identify the 16 z‐score columns
+zCols      <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
+
+# 2. full display column order: GEOID, index, then all z's
+displayCols <- c("GEOID", "housingIndex", zCols)
+
+# 3. shorten headers: drop "z_" prefix and year suffix
+shortHdrs <- c(
+  "ZIP",
+  "Index",
+  gsub("_[0-9]{4}.*$","", substring(zCols, 3))
+)
+
+# 4. build top‐10 and bottom‐10 tibbles
 top10 <- hhNorm %>%
   arrange(desc(housingIndex)) %>%
-  slice_head(n = 10) %>%
-  select(all_of(cols))
-
-top10 %>%
-  kable(
-    format   = "latex",
-    booktabs = TRUE,
-    caption  = "Top 10 ZIP Codes by Housing Index",
-    digits   = 2
-  ) %>%
-  kable_styling(
-    font_size     = 10
-  )
+  slice_head(n=10) %>%
+  select(all_of(displayCols)) %>%
+  setNames(shortHdrs)
 
 bottom10 <- hhNorm %>%
   arrange(housingIndex) %>%
-  slice_head(n = 10) %>%
-  select(all_of(cols))
+  slice_head(n=10) %>%
+  select(all_of(displayCols)) %>%
+  setNames(shortHdrs)
 
-bottom10 %>%
-  kable(
+# 5. print them back‐to‐back, auto‐scaled
+for(tbl in list(
+     list(dat=top10, cap="Top 10 ZIP Codes by Housing Index"),
+     list(dat=bottom10, cap="Bottom 10 ZIP Codes by Housing Index")
+   )) {
+  kbl(
+    tbl$dat,
     format   = "latex",
     booktabs = TRUE,
-    caption  = "Bottom 10 ZIP Codes by Housing Index",
+    caption  = tbl$cap,
+    align    = c("l", rep("r", ncol(tbl$dat)-1)),
     digits   = 2
   ) %>%
-  kable_styling(
-    font_size     = 10
-  )
+    kable_styling(
+      latex_options = c("scale_down","hold_position"),
+      font_size     = 7,
+      full_width    = TRUE
+    ) %>%
+    print()
+}
 ```
 
+```{=latex}
+\end{landscape}
+\justifying\par
+```
 
 # Lifelong Learning
 
@@ -490,3 +530,11 @@ zs_map
 ```
 
 We can see pretty clearly that zip codes 54169 and 54942 have the highest lifelong learning index, as shown in bright yellow. In fact, they are the only zip codes that have an index higher than 1. On the other hand, while barely visible, the tiny area Winnebago (zip code 54985) has the lowest lifelong learning index of -2.668. Most of the indexes do not go below -1, with a great majority clustering between 0.5 and -0.5. Overall, the lifelong learning index does not seem to vary too much between these zip codes.
+
+# Future Directions and Questions:
+
+-   Are we negating the right variables, especially for humane housing?
+
+-   Different weights to different variables/categories: a raw average is unlikely to be the most fitting way to calculate a good, informative index.
+
+-   Expert Feedback/Subjective Tuning: a good way to make sure that our indices are in keeping with the Data Exchange's expectations is to involve some FVDE personnel as we are working on these categories.
