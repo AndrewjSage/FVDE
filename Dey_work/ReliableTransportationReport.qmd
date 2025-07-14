@@ -1,0 +1,349 @@
+---
+title: "Reliable Transportation Report"
+author: "Dereje"
+format:
+  pdf:
+    include-in-header:
+      text: |
+        \usepackage{pdflscape}
+        \usepackage{ragged2e}
+---
+
+```{r setup, include=F}
+
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+# Introduction
+
+This report looks at how reliable transportation varies across different ZIP codes in the Calumet, Outagamie and Winnebago counties of Wisconsin. Using data from Fox Valley Data Exchange, we explore several key transportation indicators like commute times, access to public transit, and how many people walk or drive to work. We combine these measures into a single score, or index, to compare different ZIP codes. This index allows us to identify patterns in transportation reliability, which we illustrate through maps and summary tables showing which areas have stronger or weaker access.
+
+
+# Reliable Transportation
+
+Below is a list of the variables available on the Data Exchange website related to the Reliable Transportation topic:
+
+-   `GEOID` This corresponds to ZIP codes
+-   `Population` This is the total number of residents
+-   `ACT`  This is the percentage of workers who walk or bike to work
+-   `CAR` This is the percentage of workers who drive alone to work
+-   `PUB` This is the percentage of workers using public transit
+-   `NVC` This is the percentage of households without a vehicle
+-   `TRV` This is the mean travel time to work.
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+-   `Longitude, Latitude` spatial coordinates (not used in index)
+
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("TransportationZIPCodes.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport <- read.csv("TransportationZIPCodes.csv", skip = 5, header = F)
+names(RelTransport) <- colnames
+RelTransport <- RelTransport %>% select(-Layer, -Name)
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) |> na.omit() %>% na.omit() 
+RelTransportSumm <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
+## Exploratory Plots and Tables
+
+### Summary Statistics
+
+Having given basic variable definitions, we now move on to summary statistics:
+
+```{r, results='asis'}
+# 1. Compute the summary table
+statTbl <- RelTransportSumm %>%
+  summarise(across(
+    everything(),
+    list(
+      N      = ~sum(!is.na(.)),
+      Mean   = ~mean(.,   na.rm = TRUE),
+      StDev  = ~sd(.,     na.rm = TRUE),
+      Min    = ~min(.,    na.rm = TRUE),
+      Q1     = ~quantile(., 0.25, na.rm = TRUE),
+      Median = ~median(., na.rm = TRUE),
+      Q3     = ~quantile(., 0.75, na.rm = TRUE),
+      Max    = ~max(.,    na.rm = TRUE),
+      PctNA  = ~mean(is.na(.)) * 100
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    cols          = everything(),
+    names_to      = c("Variable","Statistic"),
+    names_pattern = "(.+)_(.+)"
+  ) %>%
+  pivot_wider(
+    names_from  = Statistic,
+    values_from = value
+  ) %>%
+  relocate(Variable, N, PctNA, Mean, StDev, Min, Q1, Median, Q3, Max) %>%
+  mutate(
+    N     = as.integer(N),
+    PctNA = round(PctNA, 1),
+    across(c(Mean, StDev, Min, Q1, Median, Q3, Max), ~ round(., 3))
+  )
+
+# 2. Print it with kableExtra
+statTbl %>%
+  kbl(
+    format    = "latex",
+    booktabs  = TRUE,
+    caption   = "Summary Statistics (PctNA = \\% missing)",
+    label     = "tab:summary",
+    align     = c("l", rep("r", 9)),
+    digits    = 3
+  ) %>%
+  kable_styling(
+    latex_options   = c("scale_down","hold_position"),
+    font_size       = 8,
+    full_width      = T
+  )
+```
+
+```{=latex}
+\justifying\par
+```
+
+
+
+### Histograms
+
+Another way to visualize the data distribution is through histograms, which are provided below for the numeric variables:
+
+```{r, fig.width=12, fig.height=10}
+RelTransportvars <- c(
+  "ACT_2019.2023",
+  "CAR_2019.2023",
+  "EKW_2024",
+  "NVC_2019.2023",
+  "PUB_2019.2023",
+  "TRV_2019.2023"
+)
+
+RelTransportbins <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+RelTransportplots <- map(RelTransportvars, ~{
+  varname <- .x
+  binwidth <- round(RelTransportbins(RelTransportSumm[[varname]]))
+  
+  ggplot(data=RelTransportSumm, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(RelTransportplots, ncol = 4, nrow = 4) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+Observations:
+
+
+-   `ACT` (active transportation) is right-skewed, indicating that most ZIP codes have very low rates of walking/biking to work.
+
+-   `Car` shows a tight, slightly left-skewed distribution, meaning most areas have high levels of car usage.
+
+-   `PUB` is highly right-skewed: public transit use is nearly zero in most areas.
+
+-   `NVC` (no vehicle) and `TRV` (commute time) are moderately right skewed
+
+-   `EKW` (walkability) is fairly normal, with most ZIP codes clustered around the median but some with higher walkability.
+
+
+Some variables like  `PUB` (public transit) may be more informative in only a few ZIP codes, suggesting that weighting or transformation may be necessary to prevent them from distorting the index.
+
+
+### Correlation Plot:
+
+We will explore the correlation between Reliable Transportation variables using a correlation plot:
+
+```{r, fig.width=10, fig.height=10}
+
+A = cor(RelTransportCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Observations:
+
+
+The correlation matrix shows a strong positive relationship between non-vehicle commuting (NVC) and active transportation `ACT` (r = 0.65), suggesting that areas with more biking/walking also tend to have higher non-car commuting.
+
+Walkability `EKW` is moderately correlated with `NVC` (r = 0.54) and public transportation use `PUB` (r = 0.50), supporting the idea that walkable areas facilitate alternative commuting methods.
+
+Travel time `TRV` is negatively correlated with walkability (r = -0.61) and public transit use (r = -0.42), suggesting that more walkable, transit-friendly areas may reduce commute durations.
+
+Car commuting `CAR` shows expected negative correlations with `ACT` (r = -0.39) and `NVC` (r = -0.31), reinforcing that higher car reliance is associated with lower use of alternative modes.
+
+These results indicate redundancy between `ACT`, `NVC`, and `EKW`, which should be considered when selecting and weighting variables for index construction.
+
+## Normalization
+
+To ensure the informativeness of our proposed indices, we would need to perform some transformations of the variables. This is to ensure that higher values of any variable would indicate a better outcome. Below is the entire list of variables that are negated or transformed and some motivation behind why:
+
+-   `CAR` is the percentage of workers who drive alone to work. Higher values reflect greater automobile dependency, limited modal options, and potential affordability and congestion concerns. Since this is a less desirable transportation outcome, the variable was negated.
+
+-   `NVC`: is the percentage of households with no vehicle available. While this could reflect car-free choice in transit-rich areas, in most ZIP codes it signals transportation vulnerability and limited access. As such, higher values are considered undesirable and the variable was negated.
+
+-   `TRV`: is the mean travel time to work. Longer commutes are associated with reduced well-being, higher transportation costs, and lower time availability. Since shorter commute times are preferable, this variable was negated.
+
+
+
+```{r}
+# Variables to flip:
+flipVars <- c("CAR_2019.2023", "NVC_2019.2023", "TRV_2019.2023")
+
+# across(all_of())
+#.x points to the current column in the new column name vector
+RelTransportNorm <- RelTransport %>% mutate(across(all_of(flipVars), ~ - .x))
+
+# z score calculations, miraculous formula
+RelTransportNorm <- RelTransportNorm %>%
+  mutate(across(all_of(names(.)),
+                ~ ( .x - mean(.x, na.rm = TRUE) ) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) %>% select(-z_GEOID)
+```
+
+## Z-score Calculations and Visualizations
+
+```{r}
+zCols <- names(RelTransportNorm)[startsWith(names(RelTransportNorm), "z_")]
+
+# 2. Impute NAs in those columns with 0, then compute the index
+RelTransportNorm <- RelTransportNorm %>%
+  mutate(across(all_of(zCols), ~ coalesce(.x, 0))) %>%
+  mutate(transportIndex = rowMeans(across(all_of(zCols))))
+
+# 3. Extract final GEOID + index
+RelTransportFinal <- RelTransportNorm %>%
+  select(GEOID, transportIndex)
+
+```
+
+-   For each variable, we have taken the observed value and subtract the average value over the 50 observations. We then divide the result by the standard deviation of said variable.
+
+-   Though the current calculations rely on summary statistics taken from the dataset (i.e. the values taken from the 50 zipcodes), we aim to utilize the average and standard deviation of the variable across all zipcodes (and commensurate geographic units) in Wisconsin.
+
+-   For this calculation, we have replaced `NA` values with the average of the dataset. In other words, all z-scores for `NA` observations are 0 instead.
+
+-   Finally, all z-scores of numeric variables are averaged across the variables to create a preliminary humane housing index.
+
+### Visualization
+
+Below is a map containing the Reliable Transportation index for all of the zipcodes:
+
+```{r, fig.width=10, fig.height=7}
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(RelTransportFinal$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+RelTransportFinal <- RelTransportFinal %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+RelTransportFinal <- RelTransportFinal %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = RelTransportFinal, aes(fill = transportIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Transportation Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+```
+
+Additionally, here are 2 tables containing the top and bottom 10 zipcodes according to our preliminary index:
+
+\newpage
+
+```{=latex}
+\justifying\par
+\begin{landscape}
+```
+
+```{r, echo=FALSE, results='asis', message=FALSE, warning=FALSE}
+
+
+# 1. identify the 16 z‐score columns
+zCols      <- names(RelTransportNorm)[startsWith(names(RelTransportNorm), "z_")]
+
+# 2. full display column order: GEOID, index, then all z's
+displayCols <- c("GEOID", "transportIndex", zCols)
+
+# 3. shorten headers: drop "z_" prefix and year suffix
+shortHdrs <- c(
+  "ZIP",
+  "Index",
+  gsub("_[0-9]{4}.*$","", substring(zCols, 3))
+)
+
+# 4. build top‐10 and bottom‐10 tibbles
+top10 <- RelTransportNorm %>%
+  arrange(desc(transportIndex)) %>%
+  slice_head(n=10) %>%
+  select(all_of(displayCols)) %>%
+  setNames(shortHdrs)
+
+bottom10 <- RelTransportNorm %>%
+  arrange(transportIndex) %>%
+  slice_head(n=10) %>%
+  select(all_of(displayCols)) %>%
+  setNames(shortHdrs)
+
+# 5. print them back‐to‐back, auto‐scaled
+for(tbl in list(
+     list(dat=top10, cap="Top 10 ZIP Codes by Transportation Index"),
+     list(dat=bottom10, cap="Bottom 10 ZIP Codes by Transportation Index")
+   )) {
+  kbl(
+    tbl$dat,
+    format   = "latex",
+    booktabs = TRUE,
+    caption  = tbl$cap,
+    align    = c("l", rep("r", ncol(tbl$dat)-1)),
+    digits   = 2
+  ) %>%
+    kable_styling(
+      latex_options = c("scale_down","hold_position"),
+      font_size     = 7,
+      full_width    = TRUE
+    ) %>%
+    print()
+}
+```
+
+```{=latex}
+\end{landscape}
+\justifying\par
+```
+
+# Future Directions and Questions:
+
+-   Are we negating the right variables?
+
+-   Different weights to different variables/categories: a raw average is unlikely to be the most fitting way to calculate a good, informative index.
+
+-   Expert Feedback/Subjective Tuning: a good way to make sure that our indices are in keeping with the Data Exchange's expectations is to involve some FVDE personnel as we are working on these categories.
