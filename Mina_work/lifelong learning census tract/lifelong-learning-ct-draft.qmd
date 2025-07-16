@@ -16,8 +16,55 @@ library(sf)
 library(factoextra)
 ```
 
+We look into lifelong learning for the census tract subdivision.
+
 ```{r}
 #file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
+
+# data wrangling blah blah blah
+balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
+names(balls) <- colnames
+balls <- balls |> select(-Layer) # removing redundant columns
+
+# summary stats dataset
+ballsSumm <- balls |> select(-GEOID, -Name)
 ```
 
-yaoi cocaine idk
+## Legend
+
+Similar to the zip code level, the census tract variable names do not provide much insight into what they are representing. Thus, I will describe them here. Please note that all of this data was collected from 2019-2023.
+
+- `EDA`: 9th grade education rate (% of residents)
+- `EDB`: High school graduation rate (% of residents)
+- `EDC`: Any higher education rate (% of residents)
+- `EDE`: College graduation rate (% of residents)
+- `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
+
+Good news! There are no `NA` entries in this dataset at all, so we do not need to worry about that!!
+
+## Exploratory Plots and Variables
+
+### Correlation Plots
+
+
+### Histograms
+
+
+### Summary Stats
+
+
+## Normalization and Z-score calculations
+
+None of the variables need to be flipped, as higher education/graduation rates implies a more educated population, which is generally viewed as a good thing.
+
+```{r}
+# normalization and zscore calc here
+```
+
+
+## Indexing and Visualization
+
+
+
