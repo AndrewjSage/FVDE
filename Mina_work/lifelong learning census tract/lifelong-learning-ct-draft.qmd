@@ -1,0 +1,23 @@
+---
+title: "idk"
+author: cheese
+format: pdf
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+```
+
+```{r}
+#file orwhatever
+```
+
+yaoi cocaine idk

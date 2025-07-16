@@ -1,0 +1,238 @@
+---
+title: "Lifelong Learning Draft/Work"
+author: mina-cheese
+format: pdf
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+```
+
+I guess we are calling these milestone projects? Well in any case I'll be doing what Binh did but for the lifelong learning ballsset. Also looking into PCA a bit but erm 
+
+```{r}
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Zip-Codes.csv",nrows=0))
+
+# data wrangling blah blah blah
+balls <- read.csv("Lifelong-Learning-Zip-Codes.csv", skip=2, header=FALSE)
+names(balls) <- colnames
+balls <- balls |> select(-Layer, -Name) # removing redundant columns
+
+# Wrangled ballsframes for other visualizations
+ballsCorr <- balls |> select(-FVDEWVAR_2023.2024, -FVDEYLCV_2024.2025, -GEOID, -Longitude, -Latitude, -Population) |> na.omit()
+ballsCorr1 <- balls |> select(-GEOID, -Longitude, -Latitude, -Population) |> na.omit()
+
+ballsSumm <- balls |> select(-GEOID, -Longitude, -Latitude)
+```
+
+## Legend
+
+The variable names are terrible so I'll describe them here. I'll give the letters while the corresponding numbers following them are the relevant years.
+
+- `GEOID`: Corresponds with the zip code
+- `EDA`: 9th grade education rate (%)
+- `EDB`: high school graduation rate (%)
+- `EDC`: any higher education rate (%)
+- `EDE`: college graduation rate (%)
+- `EDG`: preschool enrollment for ages 3-4 (%)
+- `FWDEWVAR`: public school suspensions K-12
+- `FVDEYLCV`: public school enrollment K-12
+
+It is worth noting that there is a significant number of `NA` entries in the last two variables.
+
+## Exploratory Plots and Variables
+
+### Correlation n Shit
+
+Here is the correlation plot with the final two variables omitted. 
+
+```{r}
+# Without the last two variables
+plt = cor(ballsCorr)
+corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Here is the correlation plot inlcuding the last two variables. Due to the large number of `NA` entries, the number of rows has been shaved down from 52 to 25.
+
+```{r}
+# With the last two variables
+plt1 = cor(ballsCorr1)
+corrplot(plt1, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+balls interpretation or something??
+
+### PCA?? omg!!!
+
+```{r}
+library("FactoMineR")
+res.pca <- PCA(ballsCorr1,ncp=7)
+
+fviz_eig(res.pca, addlabels=TRUE)
+```
+
+```{r}
+var <- get_pca_var(res.pca)
+head(var$cor)
+```
+
+```{r}
+get_eigenvalue(res.pca)
+```
+
+
+### Histograms
+
+```{r, fig.width=9, fig.height=4}
+vars <- c("EDA_2019.2023", "EDB_2019.2023", "EDC_2019.2023" ,"EDE_2019.2023", "EDG.X341_2019.2023", "FVDEWVAR_2023.2024", "FVDEYLCV_2024.2025")
+
+bins_fd <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+plots <- map(vars, ~{
+  varname <- .x
+  binwidth <- round(bins_fd(balls[[varname]]))
+  
+  ggplot(data=balls, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(plots, ncol = 4, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+### Summary statistics
+
+```{r, results='asis'}
+stargazer(ballsSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), font.size = "small", notes.append=F, header=F)
+```
+
+## Normalization and Z-Score Calculations
+
+I want to start transforming data so I can do the z-score calculations and indexing, but the correlation between the `EDX` variables are quite high, so maybe it doesn't make sense to do them all. I'll just do them for now though as a baseline.
+
+The only variable I will flip is the `FVDEWVAR` which corresponds to the number of public school suspensions in K-12, as many would consider a higher number of suspensions to be a bad thing.
+
+```{r}
+#flipping what needs to be flipped
+flipVars <- c("FVDEWVAR_2023.2024")
+
+ballsNorm <- balls |> mutate(across(all_of(flipVars), ~ - .x))
+
+#z-score calculations wowge
+ballsNorm <- ballsNorm |> 
+  mutate(across(all_of(names(balls)),
+                ~ (.x - mean(.x, na.rm = TRUE)) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) |> select(-z_GEOID, -z_Longitude, -z_Latitude)
+
+zscore_names <- names(ballsNorm)[startsWith(names(ballsNorm), "z_")] # names of zscore cols
+zscores <- ballsNorm |> select(GEOID, zscore_names)
+head(zscores)
+```
+
+## Indexing and Visualization
+
+First I will calculate an index for each zip code through a simple average of all the variables. Lowkey this is kinda sus.
+
+```{r}
+ballsIndex <- balls |> select(-Longitude, -Latitude)
+meanIndex <- data.frame('GEOID'=ballsIndex[,1], Index=rowMeans(ballsIndex[,-1], na.rm=TRUE))
+head(meanIndex)
+```
+
+To visualize the indexes, we can create a map with them.
+
+```{r, fig.width=10, fig.height=10}
+meanIndex <- data.frame('GEOID'=ballsIndex[,1], Index=rowMeans(ballsIndex[,-1], na.rm=TRUE))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(meanIndex$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+meanIndex <- meanIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+meanIndex <- meanIndex %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+avg_map <- ggplot() +
+  geom_sf(data = meanIndex, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index (mean) by Zipcode") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
+We can also compute an index by averaging the z-scores, so they will be more centered around 0.
+
+```{r}
+zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
+head(zscoreIndex)
+```
+
+Again, we can draw a map to visualize this.
+
+```{r, fig.width=10, fig.height=10}
+zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(zscoreIndex$GEOID)
+spatial <- zctas(state="wi", class="sf", year=2010, progress_bar=F)
+foxZips <- spatial %>% mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>% filter(ZCTA5CE10 %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(ZCTA5CE10=as.character(ZCTA5CE10)) %>%
+  filter(!ZCTA5CE10 %in% zips)
+
+# joining the data tables together
+zscoreIndex <- zscoreIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="ZCTA5CE10"))
+
+zscoreIndex <- zscoreIndex %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+zs_map <- ggplot() +
+  geom_sf(data = zscoreIndex, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index (z-score) by Zipcode") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+zs_map
+```
+
+
+We can put them side by side for easier comparison.
+
+```{r}
+wrap_plots(avg_map, zs_map)
+```
+
+Cool.
+
+
+
+ctrl+alt+i
+
