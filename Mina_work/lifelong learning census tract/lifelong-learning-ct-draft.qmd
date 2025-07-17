@@ -27,9 +27,10 @@ colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
 balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
 names(balls) <- colnames
 balls <- balls |> select(-Layer) # removing redundant columns
+names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
 
-# summary stats dataset
-ballsSumm <- balls |> select(-GEOID, -Name)
+# data for the prelim analysis
+ballsAnal <- balls |> select(-GEOID, -Name)
 ```
 
 ## Legend
@@ -42,18 +43,68 @@ Similar to the zip code level, the census tract variable names do not provide mu
 - `EDE`: College graduation rate (% of residents)
 - `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
 
-Good news! There are no `NA` entries in this dataset at all, so we do not need to worry about that!!
+Good news! There are basically no `NA` entries in this dataset at all, so we do not need to worry about that!! The one `NA` entry is in the preschool enrollment rate `EDG` in census tract 7. Also worth noting that there are a lot of 0 entries in that column. Not sure why that is.
 
 ## Exploratory Plots and Variables
 
 ### Correlation Plots
 
+```{r}
+# there is one NA entry in EDG. Thus, we must remove it.
+ballsCorr <- ballsAnal |> na.omit()
+
+plt = cor(ballsCorr)
+corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Odd.. one would think that population would be correlated with these other factors. actually nvm because these are in percentages whatever
+
+### Scatterplots
+
+I am a bit skeptical about the population thing so let's plot that. now that i thought about it maybe i didnt need to do this but whatever
+
+```{r, fig.cap="Population plotted against each variable"}
+vars <- c("EDA", "EDB", "EDC", "EDE", "EDG")
+
+scat_plots <- map(vars, ~{
+  varb <- .x
+  
+  ggplot(data=balls, aes_string(x='Population', y=varb)) +
+    geom_point() +
+    labs(title=paste(varb, "vs Population"), x="Population", y=varb)
+})
+
+wrap_plots(scat_plots, ncol=3, nrow=2)
+```
 
 ### Histograms
 
+We can also look at histograms for each of the variables. 
+
+```{r, fig.width=8, fig.height=5}
+bins_fd <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+his_plots <- map(vars, ~{
+  varname <- .x
+  binwidth <- round(bins_fd(balls[[varname]]))
+  
+  ggplot(data=balls, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(his_plots, ncol = 3, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+insert analysis idk
 
 ### Summary Stats
 
+```{r, results='asis'}
+stargazer(ballsAnal, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), font.size = "small", notes.append=F, header=F)
+```
 
 ## Normalization and Z-score calculations
 
