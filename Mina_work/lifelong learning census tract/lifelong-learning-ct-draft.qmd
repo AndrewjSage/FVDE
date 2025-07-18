@@ -14,6 +14,7 @@ library(patchwork)
 library(tigris)
 library(sf)
 library(factoextra)
+library(kableExtra)
 ```
 
 We look into lifelong learning for the census tract subdivision.
@@ -106,16 +107,78 @@ insert analysis idk
 stargazer(ballsAnal, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), font.size = "small", notes.append=F, header=F)
 ```
 
-## Normalization and Z-score calculations
+## Normalization, Z-Score Calculations, and Indexing
+
+Now we move on to nor
 
 None of the variables need to be flipped, as higher education/graduation rates implies a more educated population, which is generally viewed as a good thing.
 
 ```{r}
-# normalization and zscore calc here
+#z-score calculations wowge
+ballsNorm <- balls |> select(-Name)
+
+ballsNorm <- ballsNorm |> 
+  mutate(across(all_of(names(ballsNorm)),
+                ~ (.x - mean(.x, na.rm = TRUE)) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) |> select(-z_Population, -z_GEOID)
+
+zscore_names <- names(ballsNorm)[startsWith(names(ballsNorm), "z_")] # names of zscore cols
+zscores <- ballsNorm |> select(GEOID, zscore_names)
 ```
 
+We can compute the index and display the top 10 and bottom 10.
 
-## Indexing and Visualization
+```{r}
+# index calculations
+zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
+index <- zscores |> left_join(zscoreIndex, by = "GEOID") |> arrange(desc(Index))
 
+# Top 10 zscores
+kable(head(index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+```
 
+```{r}
+# Bottom 10 zscores
+kable(tail(index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+```
+
+## Visualization
+
+IM GONNA KRILL MYSELF
+
+```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by census tract"}
+# Making the map for the index computed by averaging the z-scores
+
+zscoreIndex <- data.frame('GEOID'=zscores[,1], Index=rowMeans(zscores[,-1], na.rm=TRUE))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(zscoreIndex$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# joining the data tables together
+zscoreIndex <- zscoreIndex %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
+
+zscoreIndex <- zscoreIndex %>% st_as_sf()
+
+# Arbitrary limits decided by ME!!! (so, not arbitrary)
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Drawing up the map
+zs_map <- ggplot() +
+  geom_sf(data = zscoreIndex, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+zs_map
+```
+
+ts is so ass :wilted_rose:
 
