@@ -1,0 +1,165 @@
+---
+title: "Milestone 2 - Binh"
+author: vub23
+format: pdf
+---
+
+```{r setup, include = F}
+# Add packages you want here bru
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+For this milestone project, I will be conducting some analysis on the census tracts dataset and incorporate Jason's idea about our new weightsets. The first part of the report would mostly include observations of notable differences between the using the Zipcode dataset and the Census tracts dataset.
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("hh census tracts.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+hh <- read.csv("hh census tracts.csv", skip = 2, header = FALSE)
+names(hh) <- colnames
+hh <- hh %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(hh) <- sub("_.*$", "", names(hh))
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-HCP) %>% na.omit()
+hhSumm <- hh %>% select(-GEOID)
+```
+
+Similar to our predictions, moving to census tracts seems to improve the number of `NA` observations in our dataset. Removing the housing voucher variable `HCP`- notoriously known for splotchy data, there are 99/103 complete cases in the census tract dataset.
+
+Below is the correlation plot for the numeric variables, which have been thankfully shortened this time around:
+
+```{r corrplot, fig.width=10, fig.height=10}
+A = cor(hhCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Since there are many new observations now, taking another look at the histograms might net us interesting insights:
+
+```{r}
+vars <- names(hhSumm)
+hhbins <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+hhplots <- map(vars, ~{
+  varname <- .x
+  binwidth <- round(hhbins(hhSumm[[varname]]))
+  
+  ggplot(data=hhSumm, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(hhplots, ncol = 4, nrow = 4) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+-   We can see a lot more striation in this dataset compared to the last set of histograms on zipcodes.
+-   Most variables seem to exhibit a right-tailed distribution, aside from housing ownership % (`HUO`) and mortgage approval rates (`APR`).
+
+### Summary Statistics:
+
+```{r, results='asis'}
+
+# Stargazer just makes the best tables
+stargazer(hhSumm, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+```{r}
+# Variables to flip:
+flipVars <- c("EJV", "EVR", "HBS", "HBU",
+  "MHC", "RBS", "RBU",
+  "RNT", "SLA.S", "TRV", "VAL")
+
+# across(all_of()) is my new favorite thing ever
+#.x points to the current column in the new column name vector
+hhNorm <- hh %>% mutate(across(all_of(flipVars), ~ - .x))
+
+# z score calculations, miraculous formula
+hhNorm <- hhNorm %>%
+  mutate(across(all_of(names(.)),
+                ~ ( .x - mean(.x, na.rm = TRUE) ) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) %>% select(-z_GEOID)
+```
+
+
+```{r}
+zCols <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
+
+# 2. Impute NAs in those columns with 0, then compute the index
+hhNorm <- hhNorm %>%
+  mutate(across(all_of(zCols), ~ coalesce(.x, 0))) %>%
+  mutate(housingIndex = rowMeans(across(all_of(zCols))))
+
+# 3. Extract final GEOID + index
+hhFinal <- hhNorm %>%
+  select(GEOID, housingIndex)
+```
+
+```{r, fig.width=10, fig.height=7}
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hhFinal$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# joining the data tables together
+hhFinal <- hhFinal %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
+
+hhFinal <- hhFinal %>% st_as_sf()
+
+# Arbitrary limits decided by AI
+zoom_xlim <- c(-89.5, -87.5)
+zoom_ylim <- c(43.5, 45.0)
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = hhFinal, aes(fill = housingIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
