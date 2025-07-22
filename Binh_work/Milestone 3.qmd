@@ -1,5 +1,5 @@
 ---
-title: "Milestone 2 - Binh"
+title: "Milestone 3 - Binh"
 author: vub23
 format: pdf
 ---
@@ -17,6 +17,8 @@ library(sf)
 library(factoextra)
 library(kableExtra)
 ```
+
+# Using Average Weightset on Census Tracts
 
 For this milestone project, I will be conducting some analysis on the census tracts dataset and incorporate Jason's idea about our new weightsets. The first part of the report would mostly include observations of notable differences between the using the Zipcode dataset and the Census tracts dataset.
 
@@ -45,6 +47,8 @@ Below is the correlation plot for the numeric variables, which have been thankfu
 A = cor(hhCorr)
 corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
+
+You can notice that the number of very strong positive or negative correlations has decreased by a lot. Most variable-pairs now exhibit some to no correlation at all.
 
 Since there are many new observations now, taking another look at the histograms might net us interesting insights:
 
@@ -95,13 +99,14 @@ hhNorm <- hhNorm %>%
 ```
 
 
+
 ```{r}
 zCols <- names(hhNorm)[startsWith(names(hhNorm), "z_")]
 
 # 2. Impute NAs in those columns with 0, then compute the index
 hhNorm <- hhNorm %>%
   mutate(across(all_of(zCols), ~ coalesce(.x, 0))) %>%
-  mutate(housingIndex = rowMeans(across(all_of(zCols))))
+  mutate(housingIndex = rowMeans(across(all_of(zCols)))) %>% mutate(GEOID=as.character(GEOID))
 
 # 3. Extract final GEOID + index
 hhFinal <- hhNorm %>%
@@ -137,11 +142,86 @@ ggplot() +
   theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
 ```
 
+Even with our old scoring paradigm, more variation in the index score can be seen across census tracts compared to zipcodes.
 
+# Integrating Jason's comments and suggestions, version 1
 
+Moving to the new census tracts dataset has indicated that the variables do not strongly correlate with one another, so using just one variable for each pillar as Jason has recommended might not yield the most informative index
 
+Something else worth noting is that we have not decided on an approach to turn our z-scores into 0-100 yet, which I hope would get cleared up by ~tuesday? For now, I will use the new weightset with the current data.
 
+Jason mentioned adding the violent crime variable into our dataset, but it is not available at this geography layer (only available in terms of towns and regions). Food security, however, is a variable that does do down to the census tract level, and I will add it in accordingly.
 
+The code following this will use tidycensus, a package that takes census data and converts it into tidy (instead of long) form. We will also need to create another index that represent a census tract's overall housing quality (which would require some freestyling/deliberation on my end).
+
+```{r}
+# get_acs is a tidycensus function, but seems like hh is the only category that might need this. ping me if any help is needed.
+hqAcs <- get_acs(
+  geography = "tract",
+  variables = c(
+    totalUnits          = "B25001_001",
+    pre1939Units        = "B25034_002",
+    noPlumbing          = "B25053_002",
+    noKitchen           = "B25054_002",
+    overcrowdedUnits    = "B25014_008"),
+  year = 2023, survey = "acs5", state = "WI", geometry = T) %>% st_as_sf()
+
+# moe is the margin of error which we do not need
+hqClean <- hqAcs %>%
+  select(-moe) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(
+    pctPre1939          = pre1939Units / totalUnits,
+    pctNoPlumbing       = noPlumbing  / totalUnits,
+    pctNoKitchen        = noKitchen   / totalUnits,
+    pctOvercrowded      = overcrowdedUnits / totalUnits)
+```
+
+```{r}
+# Funnily enough, it pulls geographic data already so we are in good hands
+hqIndex <- hqClean %>%
+  filter(totalUnits > 0 & !is.na(totalUnits)) %>%
+# scale() might be the 2nd best command I've ever seen omg
+  mutate(
+    z_PctPre1939      = as.numeric(scale(pctPre1939)),
+    z_PctNoPlumbing   = as.numeric(scale(pctNoPlumbing)),
+    z_PctNoKitchen    = as.numeric(scale(pctNoKitchen)),
+    z_PctOvercrowded  = as.numeric(scale(pctOvercrowded))
+  ) %>%
+  mutate(
+    housingQualityIndex = (z_PctPre1939 + z_PctNoPlumbing + z_PctNoKitchen + z_PctOvercrowded)/4
+  ) %>%
+  mutate(
+    z_QualIndex = as.numeric(scale(housingQualityIndex))
+  ) %>% mutate(as.character(GEOID))
+```
+
+Now we join the new quality index into the original dataframe and calculate the 2nd version of the index (after negating the z score of the housing quality):
+```{r}
+newInd <- hhNorm %>% left_join(hqIndex, by ="GEOID") %>% select(GEOID, starts_with("z"), geometry) %>% mutate(z_QualIndex = -z_QualIndex)
+finalInd <- newInd %>%
+  mutate(
+    affordabilityStabilityIndex = rowMeans(select(., z_HBU, z_HBS, z_RBU, z_RBS, z_HUO), na.rm = TRUE),
+    safeHousingIndex            = rowMeans(select(., z_EKW, z_EJV, z_TRV, z_QualIndex), na.rm = TRUE),
+    accessibilityIndex          = z_EKW,
+    diversityIndex              = z_REX,
+    hhIndex2              = (2 * affordabilityStabilityIndex + safeHousingIndex + accessibilityIndex + 0.5 * diversityIndex) / 4.5) %>%
+  select(GEOID, affordabilityStabilityIndex, safeHousingIndex,accessibilityIndex, diversityIndex, hhIndex2, geometry)
+# AGHHHHHHH FINALLY
+mapInd <- st_as_sf(finalInd)
+
+```
+
+Now we make the new map:
+
+```{r}
+ggplot() +
+  geom_sf(data = mapInd, aes(fill = hhIndex2), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
 
 
 
