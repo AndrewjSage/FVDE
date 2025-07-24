@@ -1,0 +1,68 @@
+---
+title: "Milestone 4"
+author: vub23
+format: pdf
+---
+
+```{r setup, include = F}
+# Add packages you want here bru
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+This project will implement prof Sage's recommendations for the new scoring paradigm (subjective ranking informed by stats, score curve interpolation, time and applying the curve on the census tracts). Any nontrivial step will get documented for each variable. I aim to get 5 done for this milestone.
+
+Preliminary things:
+
+-   Our census tracts will be compared against national statistics (i.e. 0 would be close to the worst tracts in the country while 100 would be close to the best)
+
+-   The 5 thresholds for "ideal", "good", "average", "bad" and "terrible" are all subjectively set based on available information. This means that aside from the lack of data for some variables (national data bodies will most likely not have data to the same level of detail), we might handle some variables in questionable/contentious ways.
+
+-   Everything is subject to change. Jason's opinion will determine how we do the other variables/categories.
+
+-   What we have done for milestones 2 and 3 are in the dumpster. We will start from scratch.
+
+## Variable 1: "Rent"
+
+Jumping headlong into stuff is my favorite thing to do, how could you tell?
+
+Absolute rent levels mean nothing if we are talking about a national scale - the sole addition of Manhattan's tracts will throw our entire proposed scale off balance. If this is the case, we should probably think of something a little more income-based. Using 2 variables: median housing costs `MHC` and median household income `INC` (from a new hh census tracts file), we can find the housing cost to income ratio.
+
+Some searches reveal that US' best cities tend to have a rent-to-income ratio of \~13% while the worst ones (New York, Miami, Seattle) would be way north of 50%, even 60%. Knowing that MHC is inclusive of mortgages, but also other fees and taxes, I would push this estimate a little to the right: our "ideal" would be any tract with the ratio less than 15%, our "terrible" would be any tract with a ratio of 50% or higher. 30% is proposed as the highest proportion of monthly income the average person should spend on rent, so we would leave it as our "average". That leaves us with 23% as the "good" benchmark and 40% as the "bad" threshold. Now to incorporate that into the dataset:
+
+```{r}
+# Read csv file
+hh <- read.csv("hh tracts 2.csv")
+hh <- hh %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(hh) <- sub("_.*$", "", names(hh))
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-HCP) %>% na.omit()
+hhSumm <- hh %>% select(-GEOID)
+
+# Creating another column calculating the ratio:
+hh <- hh %>% mutate(icPct = MHC/(INC/12)*100, icScore = approx(x=c(15,23,30,40,50), y=c(100,75,50,25,0), xout=icPct, rule=2)$y)
+
+# A lot happened in that 1 chunk, so I'll explain here. xout is the column you feed the raw data into. approx() is the function that does the linear interpolation thing. x=() is the argument where you fit the ideal/terrible thresholds. y=() is the argument where you assign the values of each threshold. rule=2 is set so values beyond the bounds are either 100 or 0.
+```
+
+Let's get a table showing the distribution of the new score:
+
+```{r, results='asis'}
+score1 <- hh %>% select(icScore)
+stargazer(score1, type = 'text', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+A median value of almost 96 –\> Very right skewed. However, this tracks with our expectations of Wisconsin/the Midwest in general.
+
+## Variable 2: Eviction Rates
