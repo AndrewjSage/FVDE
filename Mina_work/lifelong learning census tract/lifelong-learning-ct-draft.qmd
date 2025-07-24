@@ -122,7 +122,7 @@ Note that the values for the conditions are decided arbitrarily and the values f
 We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry lagrange). idk man how do you do this
 
 ```{r, fig.height=3, fig.width=15}
-vars_cond <- c("EDA_Num", "EDB_Num", "EDC_Num", "EDE_Num", "EDG_Num")
+vars_cond <- c("EDA", "EDB", "EDC", "EDE", "EDG")
 
 cond_plots <- map(vars_cond, ~{
   cdvar <- .x
@@ -130,13 +130,99 @@ cond_plots <- map(vars_cond, ~{
   ggplot(data=condition, aes_string(x=cdvar, y='Cond_Value')) +
     geom_line() +
     geom_point() +
-    labs(title=paste(cdvar, "Score"), x=cdvar, y="Condition Score") + scale_x_continuous(limits = c(0,NA))
+    labs(title=paste(cdvar, "Score"), x=paste(cdvar, "Value"), y="Condition Score") + scale_x_continuous(limits = c(0,NA))
 })
 
 wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
 
 ok now how do i do this mathematically
+
+```{r}
+# Code from ChatGPT.. im sorry i cant code... TT
+
+# For each variable, build interpolation function and apply to balls
+for (var in vars_cond) {
+  
+  # Filter condition data for just this variable (non-NA values only)
+  baseline_x <- condition[[var]]
+  baseline_y <- condition$Cond_Value
+  valid_rows <- !is.na(baseline_x) & !is.na(baseline_y)
+  
+  # Build interpolation function.. approxfun does piecewise linear interpolating
+  interp_fun <- approxfun(x = baseline_x[valid_rows], 
+                          y = baseline_y[valid_rows], 
+                          rule = 2)  # rule = 2 allows extrapolation using nearest value; we need this because some of the values fall below the terrible part, meaning they have a score of 0 (won't show up as na)
+  
+  # Apply interpolation to balls
+  new_colname <- paste0(var, "_CondScore")
+  balls[[new_colname]] <- interp_fun(balls[[var]])
+}
+```
+
+I should double check that this is correct (desmos laterrrrr)
+
+```{r}
+# dataset of just the condition scores + index (averaging everything)
+indexes <- balls |> select("Name", "GEOID", ends_with("_CondScore")) |> 
+  rowwise() |> mutate(Index = mean(c_across(ends_with("_CondScore")), na.rm = TRUE)) |>
+  ungroup() |> arrange(desc(Index))
+
+indexes <- indexes |> rename_with(~ gsub("_CondScore.*", "", .x))
+```
+
+After some coding that you cannot see, we can display the top 10 and bottom 10 indexes. The following tables show the condition scores of each of the variables as well as the index, which is an average of those scores.
+
+```{r}
+# Top 10 zscores
+kable(head(indexes, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+```
+
+```{r}
+# Bottom 10 zscores
+kable(tail(indexes, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+```
+
+## Visualization
+
+Its morbing time (map)
+
+```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by census tract"}
+# Making the map for the index computed by averaging the z-scores
+
+condScores <- indexes |> select(GEOID, Index)
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(condScores$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# joining the data tables together
+condScores <- condScores %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
+
+condScores <- condScores %>% st_as_sf()
+
+# Arbitrary limits decided by ME!!! (so, not arbitrary)
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Drawing up the map
+cond_map <- ggplot() +
+  geom_sf(data = condScores, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+cond_map
+```
+umm yeah wow so sugoi
+
+\newpage
 
 ## Normalization, Z-Score Calculations, and Indexing (OLD)
 
@@ -173,7 +259,7 @@ kable(head(index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
 kable(tail(index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
 ```
 
-## Visualization
+## Visualization (old z-score stuff)
 
 IM GONNA KRILL MYSELF
 
