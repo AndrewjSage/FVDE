@@ -121,11 +121,22 @@ Note that the values for the conditions are decided arbitrarily and the values f
 
 We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry lagrange). idk man how do you do this
 
-```{r}
+```{r, fig.height=3, fig.width=15}
+vars_cond <- c("EDA_Num", "EDB_Num", "EDC_Num", "EDE_Num", "EDG_Num")
 
+cond_plots <- map(vars_cond, ~{
+  cdvar <- .x
+  
+  ggplot(data=condition, aes_string(x=cdvar, y='Cond_Value')) +
+    geom_line() +
+    geom_point() +
+    labs(title=paste(cdvar, "Score"), x=cdvar, y="Condition Score") + scale_x_continuous(limits = c(0,NA))
+})
+
+wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
 
-
+ok now how do i do this mathematically
 
 ## Normalization, Z-Score Calculations, and Indexing (OLD)
 
