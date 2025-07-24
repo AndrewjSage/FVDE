@@ -63,6 +63,115 @@ score1 <- hh %>% select(icScore)
 stargazer(score1, type = 'text', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
 ```
 
-A median value of almost 96 –\> Very right skewed. However, this tracks with our expectations of Wisconsin/the Midwest in general.
+A median value of almost 96 –\> Very right skewed. However, this tracks with our expectations of Wisconsin/the Midwest in general. We do have very affordable housing in comparison with other areas in the US.
 
 ## Variable 2: Eviction Rates
+
+I'd also argue that this is a very important variable in terms of humane housing, though there are challenges working with eviction rates we must account for:
+
+-   Eviction can mean many things: it can be the filing of the legal process that removes tenants from a property, it can also be the actual removal of such residents from their homes.
+
+-   Some jurisdictions allow landlords to file multiple eviction notices, strongly skewing extreme values (some Maryland counties report a 147% eviction rate, for example).
+
+-   However, the bulk of values (both external and from the dataset) seem to be on the low end, so the thresholds will reflect that.
+
+Currently, the thresholds for ideal/good/average/bad/terrible are: 0%/1%/3%/7%/13%. Below is a table for how the score for the variable looks:
+
+```{r, results='asis'}
+hh <- hh %>% mutate(evScore = approx(x=c(0,1,3,7,13), y=c(100,75,50,25,0), xout=EVR, rule=2)$y)
+score2 <- hh %>% select(evScore)
+stargazer(score2, type = 'text', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+## Variable 3: Home Ownership Rates
+
+As noted by Jason, home ownership rates is a very important metric for humane housing, partly because it's a nice proxy to more humane conditions. There are still some considerations regarding this variable though:
+
+-   Higher `HUO` rates might indicate higher neighborhood stability, but also lack of rental housing.
+
+-   Tracts and areas with transient populations (like dorms and institutional quarters) might have disproportionately low levels of `HUO`, and therefore should be addressed appropriately.
+
+```{r}
+hh <- hh %>% mutate(hoScore = case_when(
+      HUO < 20 ~ NA_real_,
+      TRUE ~ approx(
+        x    = c(20, 40, 60, 80, 90),
+        y    = c(0, 20, 50, 80, 100),
+        xout = HUO,
+        rule = 2
+      )$y))
+score3 <- hh %>% select(hoScore)
+stargazer(score3, type = 'text', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+## Variable 4: Mean Travel Time
+
+This variable seems to be the most straightforward to create an index from. Some research has confirmed that any commute less than 16 minutes is ideal, and 60+ commutes to be harmful, so we know where to place our thresholds. Here is another table that shows the distribution of our score:
+
+```{r}
+hh <- hh %>% mutate(trScore = approx(
+        x    = c(16, 20, 25, 35, 60),
+        y    = c(100,  80, 50, 20,0),
+        xout = TRV,
+        rule = 2
+      )$y)
+score4 <- hh %>% select(trScore)
+stargazer(score4, type = 'text', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+## Variable 5: Diversity
+
+The last variable explicitly mentioned by Jason is that of racial/ethnic diversity. Though arguments can be made against our current prior that more diversity is conducive to more humane housing, we are still pursuing such a paradigm. Knowing that the highest possible value is 0.875, we should turn to other sources of data and examine the ranges of possible values.
+
+The biggest, most diverse cities in the country like New York and LA tend to have a `REX` of 0.75 and higher. Conversely, counties like Laredo, Texas, with a predominantly hispanic population would only come in at 0.1 or lower on the scale. Given that this is the case, my current suggestion for the thresholds are 0.15, 0.25, 0.5, 0.65 and 0.75 for conditions ranging from terrible to ideal. Below is a table showing us the distribution of `REX` scores across different tracts of our dataset.
+
+```{r, results='asis'}
+hh <- hh %>%
+  mutate(diScore = approx(
+    x    = c(0.15, 0.25, 0.50, 0.65, 0.75),
+    y    = c(0,    20,   50,   80,  100),
+    xout = REX,
+    rule = 2
+  )$y)
+score5 <- hh %>% select(diScore)
+stargazer(score5, type = 'text', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+## Putting it all together
+
+Here is a map containing all the census tracts with the new scoring paradigm:
+
+```{r}
+# Arbitrary limits decided by Mina (so, not arbitrary)
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+ind <- hh %>%  select(GEOID, ends_with("Score")) %>%  
+  rowwise() %>%  mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>% 
+  ungroup() %>%  arrange(desc(newIndex))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hh$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# joining the data tables together
+ind <- ind %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
+
+ind <- ind %>% st_as_sf()
+
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = ind, aes(fill = newIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Zipcodes by Composite Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
+Yay!
