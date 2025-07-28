@@ -1,0 +1,32 @@
+---
+title: "FVDE Progress Report 2"
+author: vub23 & mina-cheese
+format: pdf
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 5)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+This project will contain the progress we have made over the last week and a half. Per Prof. Sage's advice, we have chosen to go with a new scoring paradigm that ranks census tracts from 0 to 100 in comparison to national standards, instead of relying on z-scores. We will also look at the outliers of each vital index.
+
+## Humane Housing
+
+Insert Binh preamble here
+
+Insert Binh analysis and justifications here
+
+## Lifelong Learning
+
+Insert Mina preamble here
+
+Insert Mina analysis and justifications here
