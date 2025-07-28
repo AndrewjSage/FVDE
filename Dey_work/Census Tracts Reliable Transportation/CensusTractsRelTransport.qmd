@@ -1,0 +1,351 @@
+---
+title: "Reliable Transportation Census Tracts"
+author: "Dereje"
+format:
+  pdf:
+    include-in-header:
+      text: |
+        \usepackage{pdflscape}
+        \usepackage{ragged2e}
+---
+
+```{r setup, include=F}
+
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+
+# Reliable Transportation
+
+Once again, here is a list of Variables that we will be working with and their definitions.
+
+-   `GEOID` This corresponds to ZIP codes
+-   `Population` This is the total number of residents
+-   `ACT`  This is the percentage of workers who walk or bike to work
+-   `CAR` This is the percentage of workers who drive alone to work
+-   `PUB` This is the percentage of workers using public transit
+-   `NVC` This is the percentage of households without a vehicle
+-   `TRV` This is the mean travel time to work.
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+-   `Longitude, Latitude` spatial coordinates (not used in index)
+
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("TransportationCensusTracts.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport <- read.csv("TransportationCensusTracts.csv", skip = 5, header = F)
+names(RelTransport) <- colnames
+RelTransport <- RelTransport %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(RelTransport) <- sub("_.*$", "", names(RelTransport))
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% na.omit() 
+RelTransportSumm <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
+### Summary Statistics
+
+```{r, results='asis'}
+# 1. Compute the summary table
+statTbl <- RelTransportSumm %>%
+  summarise(across(
+    everything(),
+    list(
+      N      = ~sum(!is.na(.)),
+      Mean   = ~mean(.,   na.rm = TRUE),
+      StDev  = ~sd(.,     na.rm = TRUE),
+      Min    = ~min(.,    na.rm = TRUE),
+      Q1     = ~quantile(., 0.25, na.rm = TRUE),
+      Median = ~median(., na.rm = TRUE),
+      Q3     = ~quantile(., 0.75, na.rm = TRUE),
+      Max    = ~max(.,    na.rm = TRUE),
+      PctNA  = ~mean(is.na(.)) * 100
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    cols          = everything(),
+    names_to      = c("Variable","Statistic"),
+    names_pattern = "(.+)_(.+)"
+  ) %>%
+  pivot_wider(
+    names_from  = Statistic,
+    values_from = value
+  ) %>%
+  relocate(Variable, N, PctNA, Mean, StDev, Min, Q1, Median, Q3, Max) %>%
+  mutate(
+    N     = as.integer(N),
+    PctNA = round(PctNA, 1),
+    across(c(Mean, StDev, Min, Q1, Median, Q3, Max), ~ round(., 3))
+  )
+
+# 2. Print it with kableExtra
+statTbl %>%
+  kbl(
+    format    = "latex",
+    booktabs  = TRUE,
+    caption   = "Summary Statistics (PctNA = \\% missing)",
+    label     = "tab:summary",
+    align     = c("l", rep("r", 9)),
+    digits    = 3
+  ) %>%
+  kable_styling(
+    latex_options   = c("scale_down","hold_position"),
+    font_size       = 8,
+    full_width      = T
+  )
+```
+
+```{=latex}
+\justifying\par
+```
+
+
+### Histograms
+
+
+```{r, fig.width=12, fig.height=10}
+RelTransportvars <- c(
+  "ACT",
+  "CAR",
+  "EKW",
+  "NVC",
+  "PUB",
+  "TRV"
+)
+
+RelTransportbins <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+RelTransportplots <- map(RelTransportvars, ~{
+  varname <- .x
+  binwidth <- round(RelTransportbins(RelTransportSumm[[varname]]))
+  
+  ggplot(data=RelTransportSumm, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(RelTransportplots, ncol = 4, nrow = 4) 
+```
+
+Observations to come... compare with Zip Codes 
+
+### Correlation Plot:
+
+
+```{r, fig.width=10, fig.height=10}
+
+A = cor(RelTransportCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Observations to come... compare with zipcodes data.
+
+## Normalization
+
+Once again, the following variables will be flipped
+
+-   `CAR` is the percentage of workers who drive alone to work. Higher values reflect greater automobile dependency, limited transportation options, and potential congestion concerns. Since this is a less desirable transportation outcome, the variable was negated.
+
+-   `NVC`: is the percentage of households with no vehicle available, higher values are considered undesirable thus the variable was negated.
+
+-   `TRV`: is the mean travel time to work. Since shorter commute times are preferable, this variable was negated.
+
+
+
+```{r}
+# Variables to flip:
+flipVars <- c("CAR", "NVC", "TRV")
+
+# across(all_of())
+#.x points to the current column in the new column name vector
+RelTransportNorm <- RelTransport %>% mutate(across(all_of(flipVars), ~ - .x))
+
+# z score calculations, miraculous formula
+RelTransportNorm <- RelTransportNorm %>%
+  mutate(across(all_of(names(.)),
+                ~ ( .x - mean(.x, na.rm = TRUE) ) / sd(.x, na.rm = TRUE), 
+                .names = "z_{.col}")) %>% select(-z_GEOID)
+```
+
+## Z-score Calculations and Visualizations(OLD)
+
+```{r}
+zCols <- names(RelTransportNorm)[startsWith(names(RelTransportNorm), "z_")]
+
+# 2. Impute NAs in those columns with 0, then compute the index
+RelTransportNorm <- RelTransportNorm %>%
+  mutate(across(all_of(zCols), ~ coalesce(.x, 0))) %>%
+  mutate(transportIndex = rowMeans(across(all_of(zCols))))
+
+# 3. Extract final GEOID + index
+RelTransportFinal <- RelTransportNorm %>%
+  select(GEOID, transportIndex)
+
+```
+
+### Visualization(NEW)
+The previous map used only census tract boundaries, which made it hard to recognize familiar geographic features like Lake Winnebago or surrounding county shapes. To improve this, I added a county_outline layer using counties() and created a combined lakes object using three area_water() calls—one for each county (Outagamie, Winnebago, and Calumet). These new layers were then included in the ggplot() call using geom_sf() to display county borders and water bodies behind the tract data, making the map easier to interpret.
+```{r}
+library(tigris)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(viridis)
+
+options(tigris_use_cache = TRUE)
+
+# Get census tract shapefiles
+zips <- unique(RelTransportFinal$GEOID)
+spatial <- tracts(state = "WI", class = "sf", year = 2023, progress_bar = FALSE)
+
+# Subset: tracts with data
+foxZips <- spatial %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  filter(GEOID %in% zips)
+
+# Subset: tracts without data
+background <- spatial %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# Join your transport index data to tract shapes
+RelTransportFinal <- RelTransportFinal %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  left_join(foxZips, by = "GEOID") %>%
+  st_as_sf()
+
+# Add COUNTY BOUNDARIES for Interpretability 
+county_outline <- counties(state = "WI", year = 2023, class = "sf") %>%
+  filter(NAME %in% c("Outagamie", "Winnebago", "Calumet")) 
+
+# Add LAKES / WATER BODIES
+lakes <- rbind(
+  area_water(state = "WI", county = "Outagamie", year = 2023),
+  area_water(state = "WI", county = "Winnebago", year = 2023),
+  area_water(state = "WI", county = "Calumet", year = 2023)
+)
+
+# Set zoom area for the map
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+```
+
+Below is a map containing the Reliable Transportation index for all of the census tracts:
+```{r, fig.width=10, fig.height=7}
+# Draw the map
+ggplot() +
+  geom_sf(data = county_outline, fill = "grey80", color = "white", linewidth = 0.2) +  # [NEW] County background
+  geom_sf(data = RelTransportFinal, aes(fill = transportIndex), color = "black", linewidth = 0.2) +
+  geom_sf(data = background, fill = NA, color = "grey80", linewidth = 0.1) +
+  geom_sf(data = lakes, fill = "grey95", color = NA) +  # [NEW] Add lakes for realism
+  scale_fill_viridis_c() +
+  labs(title = "Map of Census Tracts by Composite Transportation Index") +
+  theme_minimal() +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
+Observations to come...
+
+# Incorporating Professor Sage's Suggestions 
+
+For this next section I will apply the new variable scoring method discussed in our last meeting to the topic of reliable transportation. 
+The approach involves assigning scores based on conceptually chosen thresholds, smoothing them through interpolation, and applying the resulting values to census tracts. I plan to complete six variables for this section. 
+Scores will be scaled from 0 to 100, where 0 reflects the least favorable transportation conditions and 100 reflects the most favorable, based on national comparisons. Thresholds for categories like “ideal,” “good,” “average,” “bad,” and “terrible” are chosen using a combination of outside research, logical reasoning, and the shape of each variable’s distribution.
+
+-   `ACT`  This is the percentage of workers who walk or bike to work
+-   `CAR` This is the percentage of workers who drive alone to work
+-   `PUB` This is the percentage of workers using public transit
+-   `NVC` This is the percentage of households without a vehicle
+-   `TRV` This is the mean travel time to work.
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+
+# ACT
+
+-   `ACT`  This is the percentage of workers who walk or bike to work
+
+```{r}
+# lets look at the spread of ACT so that we can assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
+stargazer(RelTransport %>% select(ACT), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+## National Context for Walking/Biking to Work
+Here is some information about average walking and biking-to-work rates in the United States from the [League of American Bicyclists](https://data.bikeleague.org/data/national-rates-of-biking-and-walking/). According to this article, based on American Community Survey (ACS) data, approximately 2.4% of people walk to work and 0.5% bike to work on average as of 2023. The ACS began reporting commute-to-work estimates in 2005, with more consistent data available since 2010.
+
+Additional data from [Census.gov](https://www.census.gov/library/stories/2019/05/younger-workers-in-cities-more-likely-to-bike-to-work.html) notes that several cities with high biking rates tend to have large university populations. For example, in Davis, California, nearly 20% of workers commute by bicycle, and in Boulder, Colorado, the rate is 10.4%.
+
+A separate article from [Census.gov](https://www.census.gov/newsroom/blogs/random-samplings/2014/05/where-do-people-bike-walk-to-work-college-towns.html)
+ focuses more on walking, reporting that in Ithaca, New York—home to Cornell University—more than 42% of commuters walk to work. Cambridge, Massachusetts, which includes Harvard and MIT, sees 24% of its workers commuting on foot. These examples highlight how city type and population characteristics influence walk/bike rates.
+
+### 0-100 scale transformation
+
+To translate the ACT variable into a 0–100 score, we can select five threshold values based on the observed distribution. Based on our Dataset, A score of 0 is assigned to census tracts where no workers walk or bike to work, while 1% is considered poor (score of 25). The midpoint score of 50 is set at 3.5%, which closely matches the dataset’s mean. A value of 7% reflects a relatively high rate and is scored as 75. Finally, 15% or above is considered ideal.
+These would be the points based on the distibution of our data, but if we compare with national benchmarks we can adjust these points accordingly. 
+
+#### adjust using national rates
+After reviewing national averages, I made several adjustments to align our scoring more closely with real-world commuting trends. Nationally, around 2.9% of people walk or bike to work combined, with rates above 10–20% typically found only in exceptional cities like Davis or Ithaca.
+
+Therefore, I updated the benchmarks as follows:
+
+0% remains the lower bound and receives a score of 0.
+
+1.2%, below the national average, is now the threshold for “bad” (score = 25).
+
+3.5% represents average conditions and is set as “average” (score = 50).
+
+7%, which is much higher than national average, is considered “good” (score = 75).
+
+17%, based on high-performing outliers like Davis, CA, is set as “ideal” (score = 100).
+
+
+```{r}
+# Score for ACT: % of workers who walk or bike to work
+RelTransport <- RelTransport %>%
+  mutate(actScore = approx(
+    x = c(0, 1.2, 3.5, 7, 17),         # subjective cutoffs based on spread
+    y = c(0, 25, 50, 75, 100),       # corresponding scores
+    xout = ACT,
+    rule = 2                         # clamp values outside the range
+  )$y)
+
+# Summary table for actScore
+score1 <- RelTransport %>% select(actScore)
+stargazer(score1, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+# CAR
+to come...
+
+# PUB
+to come...
+
+# NCV
+to come...
+
+# TRV
+to come...
+
+# EKW
+to come...
+
+
+
+# Map with using Sage's Scoring Suggestions
+to come...
+
+

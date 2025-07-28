@@ -239,7 +239,7 @@ RelTransportFinal <- RelTransportNorm %>%
 
 -   For this calculation, we have replaced `NA` values with the average of the dataset. In other words, all z-scores for `NA` observations are 0 instead.
 
--   Finally, all z-scores of numeric variables are averaged across the variables to create a preliminary humane housing index.
+-   Finally, all z-scores of numeric variables are averaged across the variables to create a preliminary index.
 
 ### Visualization
 
