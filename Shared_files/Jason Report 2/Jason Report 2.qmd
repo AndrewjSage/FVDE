@@ -19,13 +19,15 @@ library(kableExtra)
 
 This project will contain the progress we have made over the last week and a half. Per Prof. Sage's advice, we have chosen to go with a new scoring paradigm that ranks census tracts from 0 to 100 in comparison to national standards, instead of relying on z-scores. We will also look at the outliers of each vital index.
 
-## Humane Housing
+# Humane Housing
 
 Insert Binh preamble here
 
 Insert Binh analysis and justifications here
 
-## Lifelong Learning
+\newpage
+
+# Lifelong Learning
 
 We look into lifelong learning for the census tract subdivision.
 
