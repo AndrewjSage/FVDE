@@ -27,6 +27,208 @@ Insert Binh analysis and justifications here
 
 ## Lifelong Learning
 
-Insert Mina preamble here
+We look into lifelong learning for the census tract subdivision.
 
-Insert Mina analysis and justifications here
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
+
+# data wrangling blah blah blah
+balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
+names(balls) <- colnames
+balls <- balls |> select(-Layer) # removing redundant columns
+names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+ballsAnal <- balls |> select(-GEOID, -Name)
+```
+
+## Legend
+
+Similar to the zip code level, the census tract variable names do not provide much insight into what they are representing. Thus, I will describe them here. Please note that all of this data was collected from 2019-2023.
+
+- `EDA`: 9th grade education rate (% of residents)
+- `EDB`: High school graduation rate (% of residents)
+- `EDC`: Any higher education rate (% of residents)
+- `EDE`: College graduation rate (% of residents)
+- `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
+
+Good news! There are basically no `NA` entries in this dataset at all, so we do not need to worry about that!! The one `NA` entry is in the preschool enrollment rate `EDG` in census tract 7. Also worth noting that there are a lot of 0 entries in that column. Not sure why that is.
+
+## Exploratory Plots and Variables
+
+### Correlation Plots
+
+```{r}
+# there is one NA entry in EDG. Thus, we must remove it.
+ballsCorr <- ballsAnal |> na.omit()
+
+plt = cor(ballsCorr)
+corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+Odd.. one would think that population would be correlated with these other factors. actually nvm because these are in percentages whatever
+
+### Scatterplots
+
+I am a bit skeptical about the population thing so let's plot that. now that i thought about it maybe i didnt need to do this but whatever
+
+```{r, fig.cap="Population plotted against each variable"}
+vars <- c("EDA", "EDB", "EDC", "EDE", "EDG")
+
+scat_plots <- map(vars, ~{
+  varb <- .x
+  
+  ggplot(data=balls, aes_string(x='Population', y=varb)) +
+    geom_point() +
+    labs(title=paste(varb, "vs Population"), x="Population", y=varb)
+})
+
+wrap_plots(scat_plots, ncol=3, nrow=2)
+```
+
+### Histograms
+
+We can also look at histograms for each of the variables. 
+
+```{r, fig.width=8, fig.height=5}
+bins_fd <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+his_plots <- map(vars, ~{
+  varname <- .x
+  binwidth <- round(bins_fd(balls[[varname]]))
+  
+  ggplot(data=balls, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(his_plots, ncol = 3, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+insert analysis idk
+
+### Summary Stats
+
+```{r, results='asis'}
+stargazer(ballsAnal, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max", "p25", "p75"), font.size = "small", notes.append=F, header=F)
+```
+
+## Indexing (NEW)
+
+We can try to do an indexing using an arbitrarily decided scale, so we can get indexes from 1-100...
+
+```{r}
+condition <- read.csv("Condition-baseline-llct.csv")
+
+kable(condition)
+```
+
+Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The any higher education rate `EDC` variable is especially guesstimated, as almost all of the information I found online was about high school degree+ or bachelor's degree+. dont ask me for sources literally google bruh.
+
+We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry lagrange). idk man how do you do this
+
+```{r, fig.height=3, fig.width=15}
+vars_cond <- c("EDA", "EDB", "EDC", "EDE", "EDG")
+
+cond_plots <- map(vars_cond, ~{
+  cdvar <- .x
+  
+  ggplot(data=condition, aes_string(x=cdvar, y='Cond_Value')) +
+    geom_line() +
+    geom_point() +
+    labs(title=paste(cdvar, "Score"), x=paste(cdvar, "Value"), y="Condition Score") + scale_x_continuous(limits = c(0,NA))
+})
+
+wrap_plots(cond_plots, ncol=5, nrow=1)
+```
+
+ok now how do i do this mathematically
+
+```{r}
+# Code from ChatGPT.. im sorry i cant code... TT
+
+# For each variable, build interpolation function and apply to balls
+for (var in vars_cond) {
+  
+  # Filter condition data for just this variable (non-NA values only)
+  baseline_x <- condition[[var]]
+  baseline_y <- condition$Cond_Value
+  valid_rows <- !is.na(baseline_x) & !is.na(baseline_y)
+  
+  # Build interpolation function.. approxfun does piecewise linear interpolating
+  interp_fun <- approxfun(x = baseline_x[valid_rows], 
+                          y = baseline_y[valid_rows], 
+                          rule = 2)  # rule = 2 allows extrapolation using nearest value; we need this because some of the values fall below the terrible part, meaning they have a score of 0 (won't show up as na)
+  
+  # Apply interpolation to balls
+  new_colname <- paste0(var, "_CondScore")
+  balls[[new_colname]] <- interp_fun(balls[[var]])
+}
+```
+
+I should double check that this is correct (desmos laterrrrr)
+
+```{r}
+# dataset of just the condition scores + index (averaging everything)
+indexes <- balls |> select("Name", "GEOID", ends_with("_CondScore")) |> 
+  rowwise() |> mutate(Index = mean(c_across(ends_with("_CondScore")), na.rm = TRUE)) |>
+  ungroup() |> arrange(desc(Index))
+
+indexes <- indexes |> rename_with(~ gsub("_CondScore.*", "", .x))
+```
+
+After some coding that you cannot see, we can display the top 10 and bottom 10 indexes. The following tables show the condition scores of each of the variables as well as the index, which is an average of those scores.
+
+```{r}
+# Top 10 zscores
+kable(head(indexes, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+```
+
+```{r}
+# Bottom 10 zscores
+kable(tail(indexes, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+```
+
+## Visualization
+
+Its morbing time (map)
+
+```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by census tract"}
+# Making the map for the index computed by averaging the z-scores
+
+condScores <- indexes |> select(GEOID, Index)
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(condScores$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# joining the data tables together
+condScores <- condScores %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
+
+condScores <- condScores %>% st_as_sf()
+
+# Arbitrary limits decided by ME!!! (so, not arbitrary)
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Drawing up the map
+cond_map <- ggplot() +
+  geom_sf(data = condScores, aes(fill = Index), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Lifelong Learning Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+cond_map
+```
+
+umm yeah wow so sugoi
