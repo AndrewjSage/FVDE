@@ -70,7 +70,7 @@ plt = cor(ballsCorr)
 corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-anal ize here
+There is a notably high correlation between any higher education rate `EDC` and college graduation rate `EDE`. This is understandable, since any higher education includes a college education. There is also a high correlation between 9th grade education rate `EDA` and high school graduation rate `EDB`. Perhaps this is due to the fact that people who start high school (i.e. 9th grade) will end up finishing it. 
 
 ### Histograms
 
@@ -93,7 +93,7 @@ his_plots <- map(vars, ~{
 wrap_plots(his_plots, ncol = 3, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
 ```
 
-insert analysis idk.. similar to zip code level if they even read that :skull:
+The histograms look quite similar to the ones from the zip code layer. There is skewedness in the 9th grade education rate `EDA`, which makes sense since many people have been to high school. There is also an outlier in the college graduation rate `EDE`, which belongs to census tract 125.03 in Outgamie, WI; they have a college graduation rate of 76.5%.
 
 ### Summary Stats
 
@@ -113,7 +113,7 @@ kable(condition)
 
 Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The any higher education rate `EDC` variable is especially guesstimated, as almost all of the information I found online was about high school degree+ or bachelor's degree+.
 
-We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry Lagrange). The graphs below showcase the idea.
+We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry Lagrange). The graphs below illustrate the idea.
 
 ```{r, fig.height=3, fig.width=15}
 vars_cond <- c("EDA", "EDB", "EDC", "EDE", "EDG")
@@ -211,8 +211,6 @@ cond_map <- ggplot() +
 cond_map
 ```
 
-umm yeah wow so sugoi
+The highest index belongs to tract 31 in Winnebago, while the lowest index belongs to tract 7, also in Winnebago.
 
-analysis, point out the lowest tract and highest or whatever idk
-
-
+I would also like to point out tract 9400, which is on the Oneida Reservation, meaning they have a high population of Native Americans. Namely, the humane housing is the highest, while the lifelong learning index is the second lowest. While many Native Americans attend middle and high school, their drop out rates are disproportionately high, according to the Bureau of Indian Affairs. Post-secondary education graduation rate is even lower, leading to a very low overall lifelong learning index. Indeed, we can see this in the data--only 51.7% of people here have experience in any higher education `EDC`, any only 16.1% have graduated college `EDE`.
