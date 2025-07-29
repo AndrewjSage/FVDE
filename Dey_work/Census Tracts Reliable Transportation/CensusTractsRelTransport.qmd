@@ -285,6 +285,7 @@ Scores will be scaled from 0 to 100, where 0 reflects the least favorable transp
 stargazer(RelTransport %>% select(ACT), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 ## National Context for Walking/Biking to Work
+
 Here is some information about average walking and biking-to-work rates in the United States from the [League of American Bicyclists](https://data.bikeleague.org/data/national-rates-of-biking-and-walking/). According to this article, based on American Community Survey (ACS) data, approximately 2.4% of people walk to work and 0.5% bike to work on average as of 2023. The ACS began reporting commute-to-work estimates in 2005, with more consistent data available since 2010.
 
 Additional data from [Census.gov](https://www.census.gov/library/stories/2019/05/younger-workers-in-cities-more-likely-to-bike-to-work.html) notes that several cities with high biking rates tend to have large university populations. For example, in Davis, California, nearly 20% of workers commute by bicycle, and in Boulder, Colorado, the rate is 10.4%.
@@ -292,7 +293,7 @@ Additional data from [Census.gov](https://www.census.gov/library/stories/2019/05
 A separate article from [Census.gov](https://www.census.gov/newsroom/blogs/random-samplings/2014/05/where-do-people-bike-walk-to-work-college-towns.html)
  focuses more on walking, reporting that in Ithaca, New York—home to Cornell University—more than 42% of commuters walk to work. Cambridge, Massachusetts, which includes Harvard and MIT, sees 24% of its workers commuting on foot. These examples highlight how city type and population characteristics influence walk/bike rates.
 
-### 0-100 scale transformation
+#### 0-100 scale transformation
 
 To translate the ACT variable into a 0–100 score, we can select five threshold values based on the observed distribution. Based on our Dataset, A score of 0 is assigned to census tracts where no workers walk or bike to work, while 1% is considered poor (score of 25). The midpoint score of 50 is set at 3.5%, which closely matches the dataset’s mean. A value of 7% reflects a relatively high rate and is scored as 75. Finally, 15% or above is considered ideal.
 These would be the points based on the distibution of our data, but if we compare with national benchmarks we can adjust these points accordingly. 
@@ -328,11 +329,94 @@ score1 <- RelTransport %>% select(actScore)
 stargazer(score1, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
+
 # CAR
-to come...
+
+-   `CAR` This is the percentage of workers who drive alone to work
+
+```{r}
+# lets look at the spread of Car so that we can assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
+stargazer(RelTransport %>% select(CAR), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+### Compare to National Rates 
+
+According to data from the U.S. Census Bureau, the average rate of people who drove alone to work in 2019 was approximately 76%. This rate dropped to around 68% in 2022 due to the COVID-19 pandemic and increased remote work. For the purpose of this scoring system, we will use 76% as the national benchmark for "average" commuting behavior.
+
+Driving alone tends to be more common in suburban and rural areas, where public transit, walkability, and other transportation alternatives are limited. Therefore, higher values for this variable generally reflect lower transportation diversity and less sustainable commuting options.
+
+
+### 0–100 Scale Transformation
+Although this may be subjective, lets say that high rates of driving alone are undesirable (correct me if I'm wrong here). Therefore, the scoring scale is reversed: lower values receive higher scores, and higher values receive lower scores.
+
+Based on our dataset, which ranges from about 44% to 91%, and the national benchmark of 76%, we chose the following breakpoints:
+
+90% or more is considered terrible (score = 0)
+82% reflects bad conditions (score = 25)
+76%, the national average, is set as average (score = 50)
+65% is considered good (score = 75)
+50% or below reflects ideal conditions (score = 100)
+
+
+```{r}
+# Score for CAR: % of workers who drive alone to work
+RelTransport <- RelTransport %>%
+  mutate(carScore = approx(
+    x = c(90, 82, 76, 65, 50),   # reversed order because lower CAR is better
+    y = c(0, 25, 50, 75, 100),   # corresponding scores
+    xout = CAR,
+    rule = 2                     # clamp values outside the range
+  )$y)
+
+# Summary table for carScore
+score2 <- RelTransport %>% select(carScore)
+stargazer(score2, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
 
 # PUB
-to come...
+
+-   `PUB` This is the percentage of workers using public transit
+
+```{r}
+# lets look at the spread of PUB so that we can assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
+stargazer(RelTransport %>% select(PUB), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+### National Rates:
+
+According to the [U.S. Census Bureau](https://www.census.gov/content/dam/Census/library/publications/2021/acs/acs-48.pdf), around 5% of U.S. workers used public transportation to get to work as of the most recent American Community Survey (ACS) data. This average masks significant regional variation:
+
+In the Northeastern U.S., public transit usage is higher, with an overall average of 14.3%, and up to 35% in metro areas (principal cities).
+In contrast, the Southern U.S. shows much lower averages—around 2% overall, and as low as 0.3% outside metro areas.
+
+
+### 0–100 Scale Transformation
+Higher percentages of public transit use are considered more favorable for transportation equity, sustainability, and reliability. Therefore, the scoring scale increases with increasing values.
+
+Our dataset has a mean of 0.56%, a median of 0%, and a maximum of only 7.5%, which is far below national averages. This suggests that most tracts in our sample rely heavily on private vehicles, and that even a modest amount of transit use is above average in this context.
+
+Using both the national context and our local distribution, we set the following thresholds:
+
+0% = terrible (score = 0)
+0.5% = bad (score = 25) — roughly aligns with our dataset's mean
+2% = average (score = 50) — below national average but high for our data
+5% = good (score = 75) — national average
+10% = ideal (score = 100) — rare but achievable in well-served urban areas
+
+
+```{r}
+
+# Score for PUB: % of workers using public transit
+RelTransport <- RelTransport %>%
+  mutate(pubScore = approx(
+    x = c(0, 0.5, 2, 5, 10),
+    y = c(0, 25, 50, 75, 100),
+    xout = PUB,
+    rule = 2
+  )$y)
+
+# Summary table for pubScore
+score3 <- RelTransport %>% select(pubScore)
+stargazer(score3, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
 
 # NCV
 to come...
