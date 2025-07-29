@@ -19,11 +19,81 @@ library(kableExtra)
 
 This project will contain the progress we have made over the last week and a half. Per Prof. Sage's advice, we have chosen to go with a new scoring paradigm that ranks census tracts from 0 to 100 in comparison to national standards, instead of relying on z-scores. We will also look at the outliers of each vital index.
 
+\newpage
+
 # Humane Housing
 
-Insert Binh preamble here
+For this report, I've chosen 5 variables that are the closest proxies to more humane housing outcomes and created my own scoring system that ranges from 0 to 100. Most of my rationale are included below. Additionally, differences in variable distributions and scores moving from Zipcodes to Census Tracts divisions will be mentioned.
 
-Insert Binh analysis and justifications here
+## Census Tracts Dataset:
+
+```{r}
+# Read csv file
+hh <- read.csv("hh tracts 2.csv")
+hh <- hh %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(hh) <- sub("_.*$", "", names(hh))
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-HCP) %>% na.omit()
+hhSumm <- hh %>% select(-GEOID)
+```
+
+### Correlation plots and Histograms:
+
+Below is the correlation plot for numeric variables:
+
+```{r corrplot, fig.width=10, fig.height=10}
+A = cor(hhCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+We can notice the decrease in the number of strong correlations in comparison to the zipcodes dataset. Most variable-pairs now exhibit only some to no correlation at all. Notable correlations that weren't noted in the first report are noted below:
+
+-   `EJV`, the vulnerable demographics index, is negatively correlated with home ownership rates `HUO` and median income `INC`, which is understandable: with higher income, people can afford to buy instead of rent, raising `HUO`, and will not be as vulnerable, resulting in a lower demographic vulnerability index.
+
+-   `FAI`, the metric for food insecurity, shows the same negative correlations with income and home ownership, which is similarly explained.
+
+-   Median household income is also positively correlated with housing cost variables `MHC`, `RNT`, which is expected: the more you earn, the better your housing situation will likely be.
+
+-   Food insecurity and demographic vulnerability also show a strong positive correlation.
+
+```{r}
+vars <- names(hhSumm)
+hhbins <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+hhplots <- map(vars, ~{
+  varname <- .x
+  binwidth <- round(hhbins(hhSumm[[varname]]))
+  
+  ggplot(data=hhSumm, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(hhplots, ncol = 4, nrow = 5) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
+```
+
+The histograms show that even with changing the geographic divisions, most variables show the same trends and distributions. Most variables have a right-tailed distribution, save for `HUO` and `APR`, which are housing ownership rates and mortgage approval rates.
+
+### Summary Statistics:
+
+The table for summary statistics are shown below:
+
+```{r, results='asis'}
+stargazer(hhSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","mean","sd", "min", "p25", "median", "p75", "max"), font.size = "small", notes.append=F, header=F)
+```
+
+## New Index Creation:
+
+### Variable Selection Process:
+
+Per our discussions last time, our index would contain variables that encompasses affordability, safety, stability, diversity and accessibility. In the time constraint given, I have selected 5 variables that cover most of our bases, which are:
+
+## New Index Analysis:
 
 \newpage
 
@@ -50,11 +120,11 @@ ballsAnal <- balls |> select(-GEOID, -Name)
 
 Similar to the zip code level, the census tract variable names do not provide much insight into what they are representing. Thus, I will describe them here. Please note that all of this data was collected from 2019-2023.
 
-- `EDA`: 9th grade education rate (% of residents)
-- `EDB`: High school graduation rate (% of residents)
-- `EDC`: Any higher education rate (% of residents)
-- `EDE`: College graduation rate (% of residents)
-- `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
+-   `EDA`: 9th grade education rate (% of residents)
+-   `EDB`: High school graduation rate (% of residents)
+-   `EDC`: Any higher education rate (% of residents)
+-   `EDE`: College graduation rate (% of residents)
+-   `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
 
 Good news! There are basically no `NA` entries in this dataset at all, so we do not need to worry about that!! The one `NA` entry is in the preschool enrollment rate `EDG` in census tract 7. Also worth noting that there are a lot of 0 entries in that column. Not sure why that is.
 
@@ -70,11 +140,11 @@ plt = cor(ballsCorr)
 corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-There is a notably high correlation between any higher education rate `EDC` and college graduation rate `EDE`. This is understandable, since any higher education includes a college education. There is also a high correlation between 9th grade education rate `EDA` and high school graduation rate `EDB`. Perhaps this is due to the fact that people who start high school (i.e. 9th grade) will end up finishing it. 
+There is a notably high correlation between any higher education rate `EDC` and college graduation rate `EDE`. This is understandable, since any higher education includes a college education. There is also a high correlation between 9th grade education rate `EDA` and high school graduation rate `EDB`. Perhaps this is due to the fact that people who start high school (i.e. 9th grade) will end up finishing it.
 
 ### Histograms
 
-We can also look at histograms for each of the variables. 
+We can also look at histograms for each of the variables.
 
 ```{r, fig.width=8, fig.height=5}
 bins_fd <- function(x) {
