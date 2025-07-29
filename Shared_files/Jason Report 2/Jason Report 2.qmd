@@ -68,25 +68,7 @@ plt = cor(ballsCorr)
 corrplot(plt, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-Odd.. one would think that population would be correlated with these other factors. actually nvm because these are in percentages whatever
-
-### Scatterplots
-
-I am a bit skeptical about the population thing so let's plot that. now that i thought about it maybe i didnt need to do this but whatever
-
-```{r, fig.cap="Population plotted against each variable"}
-vars <- c("EDA", "EDB", "EDC", "EDE", "EDG")
-
-scat_plots <- map(vars, ~{
-  varb <- .x
-  
-  ggplot(data=balls, aes_string(x='Population', y=varb)) +
-    geom_point() +
-    labs(title=paste(varb, "vs Population"), x="Population", y=varb)
-})
-
-wrap_plots(scat_plots, ncol=3, nrow=2)
-```
+anal ize here
 
 ### Histograms
 
@@ -109,7 +91,7 @@ his_plots <- map(vars, ~{
 wrap_plots(his_plots, ncol = 3, nrow = 2) & plot_annotation(caption="*Note: histogram binwidth was decided using the Freedman-Diaconis rule.")
 ```
 
-insert analysis idk
+insert analysis idk.. similar to zip code level if they even read that :skull:
 
 ### Summary Stats
 
@@ -127,9 +109,9 @@ condition <- read.csv("Condition-baseline-llct.csv")
 kable(condition)
 ```
 
-Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The any higher education rate `EDC` variable is especially guesstimated, as almost all of the information I found online was about high school degree+ or bachelor's degree+. dont ask me for sources literally google bruh.
+Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The any higher education rate `EDC` variable is especially guesstimated, as almost all of the information I found online was about high school degree+ or bachelor's degree+.
 
-We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry lagrange). idk man how do you do this
+We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry Lagrange). The graphs below showcase the idea.
 
 ```{r, fig.height=3, fig.width=15}
 vars_cond <- c("EDA", "EDB", "EDC", "EDE", "EDG")
@@ -145,8 +127,6 @@ cond_plots <- map(vars_cond, ~{
 
 wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
-
-ok now how do i do this mathematically
 
 ```{r}
 # Code from ChatGPT.. im sorry i cant code... TT
@@ -170,8 +150,6 @@ for (var in vars_cond) {
 }
 ```
 
-I should double check that this is correct (desmos laterrrrr)
-
 ```{r}
 # dataset of just the condition scores + index (averaging everything)
 indexes <- balls |> select("Name", "GEOID", ends_with("_CondScore")) |> 
@@ -181,7 +159,7 @@ indexes <- balls |> select("Name", "GEOID", ends_with("_CondScore")) |>
 indexes <- indexes |> rename_with(~ gsub("_CondScore.*", "", .x))
 ```
 
-After some coding that you cannot see, we can display the top 10 and bottom 10 indexes. The following tables show the condition scores of each of the variables as well as the index, which is an average of those scores.
+After some coding that you cannot see, we can display the top 10 and bottom 10 indexes computed using this methodology. The following tables show these condition scores of each of the variables as well as the index, which is an average of those scores.
 
 ```{r}
 # Top 10 zscores
@@ -195,7 +173,7 @@ kable(tail(indexes, 10), caption = "Bottom 10 indexes (by Census Tract)", digits
 
 ## Visualization
 
-Its morbing time (map)
+We can visualize these indexes on a map so we have an intuitive way to compare them.
 
 ```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by census tract"}
 # Making the map for the index computed by averaging the z-scores
@@ -225,10 +203,14 @@ cond_map <- ggplot() +
   geom_sf(data = condScores, aes(fill = Index), color="black") +
   geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
   scale_fill_viridis_c() + 
-  labs(title = "Lifelong Learning Index") +
+  labs(title = "Lifelong Learning Index (by Census Tract)") +
   theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
 
 cond_map
 ```
 
 umm yeah wow so sugoi
+
+analysis, point out the lowest tract and highest or whatever idk
+
+
