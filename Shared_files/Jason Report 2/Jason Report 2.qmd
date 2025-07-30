@@ -1,6 +1,6 @@
 ---
 title: "FVDE Progress Report 2"
-author: vub23 & mina-cheese
+author: vub23, mina-cheese & Dey
 format: pdf
 ---
 
@@ -457,3 +457,505 @@ cond_map
 The highest index belongs to tract 31 in Winnebago, while the lowest index belongs to tract 7, also in Winnebago.
 
 I would also like to point out tract 9400, which is on the Oneida Reservation, meaning they have a high population of Native Americans. Namely, the humane housing is the highest, while the lifelong learning index is the second lowest. While many Native Americans attend middle and high school, their drop out rates are disproportionately high, according to the Bureau of Indian Affairs. Post-secondary education graduation rate is even lower, leading to a very low overall lifelong learning index. Indeed, we can see this in the data--only 51.7% of people here have experience in any higher education `EDC`, any only 16.1% have graduated college `EDE`.
+
+
+\newpage
+
+# Reliable Transportation
+
+Here is the list of Variables that we will be working with and their definitions.
+
+
+-   `ACT`  This is the percentage of workers who walk or bike to work
+-   `CAR` This is the percentage of workers who drive alone to work
+-   `PUB` This is the percentage of workers using public transit
+-   `NVC` This is the percentage of households without a vehicle
+-   `TRV` This is the mean travel time to work.
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+
+
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("TransportationCensusTracts2.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport <- read.csv("TransportationCensusTracts2.csv", skip = 5, header = F)
+names(RelTransport) <- colnames
+RelTransport <- RelTransport %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(RelTransport) <- sub("_.*$", "", names(RelTransport))
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% na.omit() 
+RelTransportSumm <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
+
+
+### Correlation Plot:
+
+
+```{r, fig.width=10, fig.height=10}
+
+A = cor(RelTransportCorr)
+corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
+```
+
+ACT (walk/bike) and NVC (no vehicle access) show a strong positive correlation, suggesting areas with more active commuting also have more households without cars.
+Walkability (EKW) is moderately to strongly correlated with ACT, NVC, and PUB, supporting the idea that more walkable areas promote alternative transportation modes.
+TRV (travel time) is negatively correlated with EKW and PUB, indicating that walkable and transit-accessible areas tend to have shorter commutes.
+CAR (drive alone) remains negatively correlated with ACT, PUB, and NVC, but these relationships are somewhat weaker than in the ZIP-level data, possibly due to more localized variation.
+Overall, the matrix highlights similar trends as the ZIP-level report but with sharper contrasts.
+
+### Histograms
+
+
+```{r, fig.width=12, fig.height=10}
+RelTransportvars <- c(
+  "ACT",
+  "CAR",
+  "EKW",
+  "NVC",
+  "PUB",
+  "TRV"
+)
+
+RelTransportbins <- function(x) {
+  diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
+} #using the Freedman-Diaconis rule to compute the binwidth
+
+RelTransportplots <- map(RelTransportvars, ~{
+  varname <- .x
+  binwidth <- round(RelTransportbins(RelTransportSumm[[varname]]))
+  
+  ggplot(data=RelTransportSumm, aes_string(x=varname)) + 
+    geom_histogram(fill="#2196f3", color="#000000", bins=binwidth) + 
+    labs(title=varname, x=NULL, y="Count")
+})
+
+wrap_plots(RelTransportplots, ncol = 4, nrow = 4) 
+```
+Observations:
+
+ACT, PUB, and NVC are all strongly right-skewed, indicating that most census tracts have low levels of walking/biking, transit use, and households without vehicles, with only a few areas showing high values.
+CAR remains tightly distributed and slightly left-skewed, reflecting that driving alone is still the dominant commuting mode in most tracts.
+TRV shows a moderate right skew, meaning most commute times are on the shorter side, but a few tracts have longer travel times.
+EKW (walkability) appears more balanced, roughly normal, with a slight right skew—most tracts have moderate walkability, but some urban cores are significantly more walkable.
+As with the ZIP-level results, highly skewed variables like PUB may contribute noise in rural tracts and might benefit from transformation or adjusted weighting in the index.
+
+
+### Summary Statistics
+
+```{r, results='asis'}
+# 1. Compute the summary table
+statTbl <- RelTransportSumm %>%
+  summarise(across(
+    everything(),
+    list(
+      N      = ~sum(!is.na(.)),
+      Mean   = ~mean(.,   na.rm = TRUE),
+      StDev  = ~sd(.,     na.rm = TRUE),
+      Min    = ~min(.,    na.rm = TRUE),
+      Q1     = ~quantile(., 0.25, na.rm = TRUE),
+      Median = ~median(., na.rm = TRUE),
+      Q3     = ~quantile(., 0.75, na.rm = TRUE),
+      Max    = ~max(.,    na.rm = TRUE),
+      PctNA  = ~mean(is.na(.)) * 100
+    ),
+    .names = "{.col}_{.fn}"
+  )) %>%
+  pivot_longer(
+    cols          = everything(),
+    names_to      = c("Variable","Statistic"),
+    names_pattern = "(.+)_(.+)"
+  ) %>%
+  pivot_wider(
+    names_from  = Statistic,
+    values_from = value
+  ) %>%
+  relocate(Variable, N, PctNA, Mean, StDev, Min, Q1, Median, Q3, Max) %>%
+  mutate(
+    N     = as.integer(N),
+    PctNA = round(PctNA, 1),
+    across(c(Mean, StDev, Min, Q1, Median, Q3, Max), ~ round(., 3))
+  )
+
+# 2. Print it with kableExtra
+statTbl %>%
+  kbl(
+    format    = "latex",
+    booktabs  = TRUE,
+    caption   = "Summary Statistics (PctNA = \\% missing)",
+    label     = "tab:summary",
+    align     = c("l", rep("r", 9)),
+    digits    = 3
+  ) %>%
+  kable_styling(
+    latex_options   = c("scale_down","hold_position"),
+    font_size       = 8,
+    full_width      = T
+  )
+```
+
+## New Indexing System
+```{r}
+# Function to take the column names
+colnames2 <- names(read.csv("TransportationCensusTracts2.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport <- read.csv("TransportationCensusTracts2.csv", skip = 5, header = F)
+names(RelTransport) <- colnames2
+RelTransport <- RelTransport %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(RelTransport) <- sub("_.*$", "", names(RelTransport))
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr2 <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% na.omit() 
+RelTransportSumm2 <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
+For this next section I will apply the new variable scoring method discussed in our last meeting to the topic of reliable transportation. 
+The approach involves assigning scores based on thresholds I've chosen after some research.
+Scores will be scaled from 0 to 100, where 0 reflects the least favorable transportation conditions and 100 reflects the most favorable, based on national comparisons. Thresholds for categories like “ideal,” “good,” “average,” “bad,” and “terrible” are chosen using a combination of outside research, logical reasoning, and the shape of each variable’s distribution.
+
+I will beging this process for each of the 6 Transportation related variables and explain the process along the way. 
+## Variable 1: ACT
+
+-   `ACT`  This is the percentage of workers who walk or bike to work
+
+
+### National Benchmarks for Walking/Biking to Work
+
+Here is some information about average walking and biking-to-work rates in the United States from the [League of American Bicyclists](https://data.bikeleague.org/data/national-rates-of-biking-and-walking/). According to this article, based on American Community Survey (ACS) data, approximately 2.4% of people walk to work and 0.5% bike to work on average as of 2023. The ACS began reporting commute-to-work estimates in 2005, with more consistent data available since 2010.
+
+Additional data from [Census.gov](https://www.census.gov/library/stories/2019/05/younger-workers-in-cities-more-likely-to-bike-to-work.html) notes that several cities with high biking rates tend to have large university populations. For example, in Davis, California, nearly 20% of workers commute by bicycle, and in Boulder, Colorado, the rate is 10.4%.
+
+A separate article from [Census.gov](https://www.census.gov/newsroom/blogs/random-samplings/2014/05/where-do-people-bike-walk-to-work-college-towns.html)
+ focuses more on walking, reporting that in Ithaca, New York—home to Cornell University—more than 42% of commuters walk to work. Cambridge, Massachusetts, which includes Harvard and MIT, sees 24% of its workers commuting on foot. These examples highlight how city type and population characteristics influence walk/bike rates.
+
+### 0-100 scale transformation
+
+To translate the ACT variable into a 0–100 score, we can select five threshold values based on the observed distribution. Based on our Dataset, A score of 0 is assigned to census tracts where no workers walk or bike to work, while 1% is considered poor (score of 25). The midpoint score of 50 is set at 3.5%, which closely matches the dataset’s mean. A value of 7% reflects a relatively high rate and is scored as 75. Finally, 15% or above is considered ideal.
+These would be the points based on the distibution of our data, but if we compare with national benchmarks we can adjust these points accordingly. 
+
+#### adjust using national rates
+After reviewing national averages, I made several adjustments to align our scoring more closely with real-world commuting trends. Nationally, around 2.9% of people walk or bike to work combined, with rates above 10–20% typically found only in exceptional cities like Davis or Ithaca.
+
+Therefore, I updated the benchmarks as follows:
+
+0% remains the lower bound and receives a score of 0.
+
+1.2%, below the national average, is now the threshold for “bad” (score = 25).
+
+3.5% represents average conditions and is set as “average” (score = 50).
+
+7%, which is much higher than national average, is considered “good” (score = 75).
+
+17%, based on high-performing outliers like Davis, CA, is set as “ideal” (score = 100).
+
+
+```{r results='asis'}
+# Score for ACT: % of workers who walk or bike to work
+RelTransport <- RelTransport %>%
+  mutate(actScore = approx(
+    x = c(0, 1.2, 3.5, 7, 17),         # subjective cutoffs based on spread
+    y = c(0, 25, 50, 75, 100),       # corresponding scores
+    xout = ACT,
+    rule = 2                         # clamp values outside the range
+  )$y)
+
+# Summary table for actScore
+score1 <- RelTransport %>% select(actScore)
+stargazer(score1, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = F, header = F)
+
+```
+
+
+## CAR
+
+-   `CAR` This is the percentage of workers who drive alone to work
+
+
+### Compare to National Rates 
+
+According to data from the U.S. Census Bureau, the average rate of people who drove alone to work in 2019 was approximately 76%. This rate dropped to around 68% in 2022 due to the COVID-19 pandemic and increased remote work. For the purpose of this scoring system, we will use 76% as the national benchmark for "average" commuting behavior.
+
+Driving alone tends to be more common in suburban and rural areas, where public transit, walkability, and other transportation alternatives are limited. Therefore, higher values for this variable generally reflect lower transportation diversity and less sustainable commuting options.
+
+
+### 0–100 Scale Transformation
+Although this may be subjective, lets say that high rates of driving alone are undesirable. Therefore, the scoring scale is reversed: lower values receive higher scores, and higher values receive lower scores.
+
+Based on our dataset, which ranges from about 44% to 91%, and the national benchmark of 76%, we chose the following breakpoints:
+
+90% or more is considered terrible (score = 0)
+82% reflects bad conditions (score = 25)
+76%, the national average, is set as average (score = 50)
+65% is considered good (score = 75)
+50% or below reflects ideal conditions (score = 100)
+
+
+```{r results='asis'}
+# Score for CAR: % of workers who drive alone to work
+RelTransport <- RelTransport %>%
+  mutate(carScore = approx(
+    x = c(90, 82, 76, 65, 50),   # reversed order because lower CAR is better
+    y = c(0, 25, 50, 75, 100),   # corresponding scores
+    xout = CAR,
+    rule = 2                     # clamp values outside the range
+  )$y)
+
+# Summary table for carScore
+score2 <- RelTransport %>% select(carScore)
+stargazer(score2, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+## PUB
+
+-   `PUB` This is the percentage of workers using public transit
+
+### National Rates:
+
+According to the [U.S. Census Bureau](https://www.census.gov/content/dam/Census/library/publications/2021/acs/acs-48.pdf), around 5% of U.S. workers used public transportation to get to work as of the most recent American Community Survey (ACS) data. This average masks significant regional variation:
+
+In the Northeastern U.S., public transit usage is higher, with an overall average of 14.3%, and up to 35% in metro areas (principal cities).
+In contrast, the Southern U.S. shows much lower averages—around 2% overall, and as low as 0.3% outside metro areas.
+
+
+### 0–100 Scale Transformation
+Higher percentages of public transit use are considered more favorable for transportation equity, sustainability, and reliability. Therefore, the scoring scale increases with increasing values.
+
+Our dataset has a mean of 0.56%, a median of 0%, and a maximum of only 7.5%, which is far below national averages. This suggests that most tracts in our sample rely heavily on private vehicles, and that even a modest amount of transit use is above average in this context.
+
+Using both the national context and our local distribution, we set the following thresholds:
+
+0% = terrible (score = 0)
+0.5% = bad (score = 25) — roughly aligns with our dataset's mean
+2% = average (score = 50) — below national average but high for our data
+5% = good (score = 75) — national average
+10% = ideal (score = 100) — rare but achievable in well-served urban areas
+
+
+```{r results='asis'}
+
+# Score for PUB: % of workers using public transit
+RelTransport <- RelTransport %>%
+  mutate(pubScore = approx(
+    x = c(0, 0.5, 2, 5, 10),
+    y = c(0, 25, 50, 75, 100),
+    xout = PUB,
+    rule = 2
+  )$y)
+
+# Summary table for pubScore
+score3 <- RelTransport %>% select(pubScore)
+stargazer(score3, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+## NVC
+
+-   `NVC` This is the percentage of households without a vehicle
+
+### National Rates for Vehicle Access
+
+According to U.S. Census Bureau data, approximately 8.5% of households in the U.S. had no vehicle available as of the 2020 American Community Survey (ACS) 5-Year Estimates.
+
+There is substantial variation across regions and cities:
+
+In dense urban areas like New York City, up to 55% of households do not have a vehicle.
+In contrast, rural and suburban regions may have 1–2% or fewer zero-vehicle households.
+The national median across tracts is much lower than 8.5% due to the geographic spread of car-dependent areas.
+Deciding weather higher or lower values are favourable for this variable is dificult. High percentage of households without cars may reflect either poverty or strong public transit infrastructure. Because we're scoring this in the context of reliable transportation access, lets say that higher percentages without a vehicle is less desirable especially for areas with poor transit options.
+
+### 0–100 Scale Transformation
+In this context, higher NVC values are considered worse, so the scoring scale is inverted: lower values are better.
+
+In our dataset:
+Mean = 4.78%
+Median = 3.20%
+Max = 27.04%
+Based on both this and national ranges, we define:
+
+30%+ = terrible (score = 0) — very high percentage with no vehicle
+15% = bad (score = 25)
+8.5% = average (score = 50) — matches national average
+4% = good (score = 75) — slightly below our dataset’s mean
+1% or less = ideal (score = 100)
+
+
+```{r results='asis'}
+# Score for NVC: % of households without a vehicle (lower is better)
+RelTransport <- RelTransport %>%
+  mutate(nvcScore = approx(
+    x = c(25, 15, 8.5, 4, 0),   # descending because lower is better
+    y = c(0, 25, 50, 75, 100),  # corresponding scores
+    xout = NVC,
+    rule = 2
+  )$y)
+
+# Summary table for nvcScore
+score4 <- RelTransport %>% select(nvcScore)
+stargazer(score4, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+
+## TRV
+
+-   `TRV` This is the mean travel time to work.
+
+This variable should be easier to interpret, as shorter travel times to work are considered favorable in most circumstances.
+
+### National Rates for Commute Time
+According to the U.S. Census Bureau’s 2021 ACS 1-Year Estimates, the national average commute time in the United States was approximately 26.4 minutes. Commute times vary by geography:
+
+In large metro areas (e.g., New York, Washington D.C., Los Angeles), commute times often exceed 35 minutes.
+In smaller cities and rural areas, commutes can be as short as 10–15 minutes.
+
+
+### 0–100 Scale Transformation
+Because shorter commutes are preferred, the scoring system is inversely scaled—lower values receive higher scores.
+
+Our dataset ranges from 11.8 to 31.7 minutes, with a mean of ~19.9 and a median of ~19.1, which is well below the national average. This suggests our study area experiences relatively short commute times overall.
+
+We selected the following thresholds for scoring:
+
+35 minutes or more = terrible (score = 0)
+30 minutes = bad (score = 25)
+26.4 minutes = average (score = 50) — matches national average
+20 minutes = good (score = 75) — slightly above our local median
+15 minutes or less = ideal (score = 100)
+
+```{r results='asis'}
+
+# Score for TRV: mean travel time to work (lower is better)
+RelTransport <- RelTransport %>%
+  mutate(trvScore = approx(
+    x = c(35, 30, 26.4, 20, 15),
+    y = c(0, 25, 50, 75, 100),
+    xout = TRV,
+    rule = 2
+  )$y)
+
+
+# Summary table for trvScore
+score5 <- RelTransport %>% select(trvScore)
+stargazer(score5, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+
+## EKW
+
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+
+### National rates for Walkability Index
+According to the Fox Valley Data Exchange, the EKW variable represents a walkability ranking based on intersection density, proximity to transit, diversity of nearby businesses, and housing density. It is sourced from the Environmental Justice Index, developed by the Agency for Toxic Substances and Disease Registry (ATSDR).
+
+Values range from 1 to 20, with 20 representing the most walkable environments—typically dense, mixed-use urban areas—and 1 representing very car-dependent, low-connectivity zones.
+
+Our dataset ranges from 3.67 to 15.92, with a mean of ~8.57 and a median of ~7.99, suggesting that most census tracts fall in the moderate range of walkability. Tracts near or above 15 are strong outliers and likely represent downtown cores or neighborhoods with compact, transit-rich design.
+
+### 0–100 Scale Transformation
+
+Since higher walkability is a favorable outcome, the scoring increases with EKW.
+
+Based on both the dataset and the 1–20 scale from ATSDR, the following breakpoints were chosen:
+
+3 or below = terrible (score = 0) — very limited walkability
+6 = bad (score = 25) — below dataset median
+9 = average (score = 50) — near dataset mean
+13 = good (score = 75)
+16 or above = ideal (score = 100) — strong walkable tracts, close to scale maximum
+
+
+```{r results='asis'}
+# Score for EKW: Walkability index (higher is better)
+RelTransport <- RelTransport %>%
+  mutate(ekwScore = approx(
+    x = c(3, 6, 9, 13, 16),
+    y = c(0, 25, 50, 75, 100),
+    xout = EKW,
+    rule = 2
+  )$y)
+
+# Summary table for ekwScore
+score6 <- RelTransport %>% select(ekwScore)
+stargazer(score6, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+
+# Map
+
+This map uses the entire scale 0-100 despite values in our dataset not reaching both ends of the spectrum. Although the color palette will be less extreme, this is beneficial so that we can compare the tri county to national benchmarks and understand where we stand relative to other areas in the United States.
+```{r, fig.width=10, fig.height=10, fig.cap="Map of Reliable Transportation index by census tract"}
+library(tigris)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(viridis)
+
+options(tigris_use_cache = TRUE)
+
+# Set zoom limits
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Pull tracts from WI
+spatial <- tracts(state = "WI", class = "sf", year = 2023, progress_bar = FALSE)
+
+# Identify GEOIDs we care about
+zips <- unique(RelTransport$GEOID)
+
+# Subset spatial layers
+foxZips <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(GEOID %in% zips)
+background <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(!GEOID %in% zips)
+
+# Build the new scoring index
+ind <- RelTransport %>%
+  select(GEOID, ends_with("Score")) %>%
+  rowwise() %>%
+  mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  st_drop_geometry() %>%  # drop geometry in case it's an sf already
+  left_join(foxZips, by = "GEOID") %>%
+  st_as_sf()
+
+# COUNTY OUTLINES
+county_outline <- counties(state = "WI", year = 2023, class = "sf") %>%
+  filter(NAME %in% c("Outagamie", "Winnebago", "Calumet"))
+
+# LAKES
+lakes <- rbind(
+  area_water(state = "WI", county = "Outagamie", year = 2023),
+  area_water(state = "WI", county = "Winnebago", year = 2023),
+  area_water(state = "WI", county = "Calumet", year = 2023)
+)
+
+# Final map using newIndex but with geographic features
+ggplot() +
+  geom_sf(data = county_outline, fill = "grey80", color = "white", linewidth = 0.2) +     # county background
+  geom_sf(data = ind, aes(fill = newIndex), color = "black", linewidth = 0.2) +           # data tracts
+  geom_sf(data = background, fill = NA, color = "grey95", color = "grey80", linewidth = 0.1) +              # background tracts
+  geom_sf(data = lakes, fill = "grey95", color = NA) +                                    # water bodies
+  scale_fill_viridis_c(name = "Transportation Index", limits = c(0, 100)) + ### not sure if it's right to set this scale for the color pallette here.
+  labs(title = "Map of Census Tracts by Composite Transportation Index") +
+  theme_minimal() +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+ 
+```
+# Map & Index Observations:
+The map shows a clear urban/rural divide in transportation accessibility. Census tracts in central urban areas, especially those near downtown Appleton and Oshkosh score much higher on the index, which suggests better walkability, transit access, and lower car dependency.
+On the other hand, rural tracts show consistently low index scores. This is what we would expect, but raises questions about whether the current index over penalizes low density areas where walking or public transit may not be practical options.
+The subjectivity of score thresholds (deciding what is “good” or “average”) in our new scoring process may influence final rankings and this might be something to look at further.
+The equal weighting of all components assumes each variable contributes equally to transportation reliability. This might be something to look into more closely as some factors for example car dependency might dominate a tract’s score.
+
+
+
+## Potential Concerns & Further Exploration:
+Some areas may score lower not because they lack access, but because certain types of infrastructure—like public transit—aren’t as relevant in those areas. For example, rural farmland would not need to have the same infrastructure as an urban area to  to be considered accessible.
+
+
+# Conclusive Thoughts/Further Questions
