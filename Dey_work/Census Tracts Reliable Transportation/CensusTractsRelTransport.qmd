@@ -654,3 +654,13 @@ ggplot() +
  
 ```
 
+# Map & Index Observations:
+The map shows a clear urban–rural divide in transportation accessibility. Census tracts in central urban areas—especially those near downtown Appleton and Oshkosh—score much higher on the index, suggesting better walkability, transit access, and lower car dependency.
+On the other hand, rural tracts show consistently low index scores. This is what we would expect, but raises questions about whether the current index over penalizes low density areas where walking or public transit may not be practical options.
+The subjectivity of score thresholds (deciding what is “good” or “average”) in our new scoring process may influence final rankings and this might be something to look at further.
+The equal weighting of all components assumes each variable contributes equally to transportation reliability. This might be something to look into more closely as some factors for example car dependency might dominate a tract’s score.
+
+
+## Potential Concerns & Further Exploration:
+Some areas may score lower not because they lack access, but because certain types of infrastructure—like public transit—aren’t as relevant in those areas. For example, rural farmland would not need to have the same infrastructure as an urban area to  to be considered accessible.
+
