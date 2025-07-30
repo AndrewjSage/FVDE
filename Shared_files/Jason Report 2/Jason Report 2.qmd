@@ -5,7 +5,7 @@ format: pdf
 ---
 
 ```{r setup, include=F}
-knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.height = 10)
+knitr::opts_chunk$set(echo = F, message=FALSE, warning=FALSE, fig.height = 10)
 options(scipen = 5)
 library(tidyverse)
 library(stargazer)
@@ -59,13 +59,13 @@ We can notice the decrease in the number of strong correlations in comparison to
 
 -   Food insecurity and demographic vulnerability also show a strong positive correlation.
 
-```{r}
-vars <- names(hhSumm)
+```{r, fig.width=10}
+bvars <- names(hhSumm)
 hhbins <- function(x) {
   diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
 } #using the Freedman-Diaconis rule to compute the binwidth
 
-hhplots <- map(vars, ~{
+hhplots <- map(bvars, ~{
   varname <- .x
   binwidth <- round(hhbins(hhSumm[[varname]]))
   
@@ -129,7 +129,7 @@ score2 <- hh %>% select(evScore)
 stargazer(score2, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
 ```
 
-## Variable 3: Home Ownership Rates
+### Variable 3: Home Ownership Rates
 
 As noted by Jason, home ownership rates is a very important metric for humane housing, partly because it's a nice proxy to more humane conditions. There are still some considerations regarding this variable though:
 
@@ -185,6 +185,8 @@ score5 <- hh %>% select(diScore)
 stargazer(score5, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
 ```
 
+\newpage
+
 ## New Index Analysis:
 
 With our 5 variables selected, here is a map containing the average of the new scores for each census tracts and a table containing the top and bottom 10 tracts along with individual scores:
@@ -222,6 +224,8 @@ ggplot() +
   theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
 ```
 
+\newpage
+
 ```{r}
 # Drop geometry, rename columns, keep only the scores
 scoreTbl <- ind %>% 
@@ -250,6 +254,16 @@ knitr::kable(top10,    caption = "Top 10 Tracts",    digits = 1, booktabs = TRUE
 knitr::kable(bottom10, caption = "Bottom 10 Tracts", digits = 1, booktabs = TRUE) %>% 
   kable_styling(full_width = FALSE)
 ```
+
+There are some observations about the best and worst humane housing performers we can make:
+
+-   The census tract with the highest humane housing index is tract 9400, which is on the Oneida reservation. It led other census tracts not only in terms of affordability but also diversity, which is the reason why it got the highest average score.
+
+-   Looking at other tracts in the top 10 table, we can see that they are performing well not because of, but in spite of the diversity score: 6/10 tracts have a diversity index of less than 30/100. This is expected for small areas in a state like Wisconsin, potentially meriting some further investigation into the best way to account for diversity.
+
+-   As for census tracts in the bottom 10, a consistent trend among these areas is low home ownership scores. Though the metric can be distorted by the presence of institution quarters and dorms, they also imply housing instability and understandably less humane housing outcomes.
+
+-   There are also tracts in the bottom 10 which are designated opportunity zones - less fortunate areas which have received federal assistance and funding.
 
 \newpage
 
@@ -288,7 +302,7 @@ Good news! There are basically no `NA` entries in this dataset at all, so we do 
 
 ### Correlation Plots
 
-```{r}
+```{r, fig.width=6, fig.height=6}
 # there is one NA entry in EDG. Thus, we must remove it.
 ballsCorr <- ballsAnal |> na.omit()
 
@@ -303,6 +317,9 @@ There is a notably high correlation between any higher education rate `EDC` and 
 We can also look at histograms for each of the variables.
 
 ```{r, fig.width=8, fig.height=5}
+# declaring vars - b
+vars <- c("EDA", "EDB", "EDC", "EDE", "EDG")
+
 bins_fd <- function(x) {
   diff(range(x, na.rm = TRUE)) / (2 * IQR(x, na.rm = TRUE) / length(x)^(1/3))
 } #using the Freedman-Diaconis rule to compute the binwidth
