@@ -145,6 +145,20 @@ wrap_plots(RelTransportplots, ncol = 4, nrow = 4)
 
 Observations to come... compare with Zip Codes 
 
+
+
+-   `ACT` (active transportation) is right-skewed, indicating that most ZIP codes have very low rates of walking/biking to work.
+
+
+When we compare with zipcodes data, we can see that the distribution for active transportation remains quite similar, and it is still right skewed. This indicates that most census tracts have veery low rates of walking/biking to work with a few exceptions.
+
+-   `Car` shows a tight, slightly left-skewed distribution, meaning most areas have high levels of car usage.
+
+-   `PUB` is highly right-skewed: public transit use is nearly zero in most areas.
+
+-   `NVC` (no vehicle) and `TRV` (commute time) are moderately right skewed
+
+-   `EKW` (walkability) is fairly normal, with most ZIP codes clustered around the median but some with higher walkability.
 ### Correlation Plot:
 
 
@@ -201,7 +215,7 @@ RelTransportFinal <- RelTransportNorm %>%
 
 ### Visualization(NEW)
 The previous map used only census tract boundaries, which made it hard to recognize familiar geographic features like Lake Winnebago or surrounding county shapes. To improve this, I added a county_outline layer using counties() and created a combined lakes object using three area_water() calls—one for each county (Outagamie, Winnebago, and Calumet). These new layers were then included in the ggplot() call using geom_sf() to display county borders and water bodies behind the tract data, making the map easier to interpret.
-```{r}
+```{r}  
 library(tigris)
 library(sf)
 library(ggplot2)
@@ -265,6 +279,24 @@ Observations to come...
 
 # Incorporating Professor Sage's Suggestions 
 
+I will start over here i should probably make a new document
+```{r}
+# Function to take the column names
+colnames2 <- names(read.csv("TransportationCensusTracts2.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport2 <- read.csv("TransportationCensusTracts2.csv", skip = 5, header = F)
+names(RelTransport2) <- colnames2
+RelTransport2 <- RelTransport2 %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(RelTransport2) <- sub("_.*$", "", names(RelTransport2))
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr2 <- RelTransport2 %>% select(-GEOID, -Longitude, -Latitude) %>% na.omit() 
+RelTransportSumm2 <- RelTransport2 %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
 For this next section I will apply the new variable scoring method discussed in our last meeting to the topic of reliable transportation. 
 The approach involves assigning scores based on conceptually chosen thresholds, smoothing them through interpolation, and applying the resulting values to census tracts. I plan to complete six variables for this section. 
 Scores will be scaled from 0 to 100, where 0 reflects the least favorable transportation conditions and 100 reflects the most favorable, based on national comparisons. Thresholds for categories like “ideal,” “good,” “average,” “bad,” and “terrible” are chosen using a combination of outside research, logical reasoning, and the shape of each variable’s distribution.
@@ -282,7 +314,7 @@ Scores will be scaled from 0 to 100, where 0 reflects the least favorable transp
 
 ```{r}
 # lets look at the spread of ACT so that we can assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
-stargazer(RelTransport %>% select(ACT), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+stargazer(RelTransport2 %>% select(ACT), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 ## National Context for Walking/Biking to Work
 
@@ -316,7 +348,7 @@ Therefore, I updated the benchmarks as follows:
 
 ```{r}
 # Score for ACT: % of workers who walk or bike to work
-RelTransport <- RelTransport %>%
+RelTransport2 <- RelTransport2 %>%
   mutate(actScore = approx(
     x = c(0, 1.2, 3.5, 7, 17),         # subjective cutoffs based on spread
     y = c(0, 25, 50, 75, 100),       # corresponding scores
@@ -325,7 +357,7 @@ RelTransport <- RelTransport %>%
   )$y)
 
 # Summary table for actScore
-score1 <- RelTransport %>% select(actScore)
+score1 <- RelTransport2 %>% select(actScore)
 stargazer(score1, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
@@ -336,7 +368,7 @@ stargazer(score1, type = 'text', summary.stat = c("n", "mean", "sd", "min", "med
 
 ```{r}
 # lets look at the spread of Car so that we can assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
-stargazer(RelTransport %>% select(CAR), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+stargazer(RelTransport2 %>% select(CAR), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 ### Compare to National Rates 
 
@@ -359,7 +391,7 @@ Based on our dataset, which ranges from about 44% to 91%, and the national bench
 
 ```{r}
 # Score for CAR: % of workers who drive alone to work
-RelTransport <- RelTransport %>%
+RelTransport2 <- RelTransport2 %>%
   mutate(carScore = approx(
     x = c(90, 82, 76, 65, 50),   # reversed order because lower CAR is better
     y = c(0, 25, 50, 75, 100),   # corresponding scores
@@ -368,7 +400,7 @@ RelTransport <- RelTransport %>%
   )$y)
 
 # Summary table for carScore
-score2 <- RelTransport %>% select(carScore)
+score2 <- RelTransport2 %>% select(carScore)
 stargazer(score2, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
@@ -378,7 +410,7 @@ stargazer(score2, type = 'text', summary.stat = c("n", "mean", "sd", "min", "med
 
 ```{r}
 # lets look at the spread of PUB so that we can assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
-stargazer(RelTransport %>% select(PUB), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+stargazer(RelTransport2 %>% select(PUB), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 ### National Rates:
 
@@ -405,7 +437,7 @@ Using both the national context and our local distribution, we set the following
 ```{r}
 
 # Score for PUB: % of workers using public transit
-RelTransport <- RelTransport %>%
+RelTransport2 <- RelTransport2 %>%
   mutate(pubScore = approx(
     x = c(0, 0.5, 2, 5, 10),
     y = c(0, 25, 50, 75, 100),
@@ -414,7 +446,7 @@ RelTransport <- RelTransport %>%
   )$y)
 
 # Summary table for pubScore
-score3 <- RelTransport %>% select(pubScore)
+score3 <- RelTransport2 %>% select(pubScore)
 stargazer(score3, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
@@ -423,7 +455,7 @@ stargazer(score3, type = 'text', summary.stat = c("n", "mean", "sd", "min", "med
 -   `NVC` This is the percentage of households without a vehicle
 ```{r}
 # Look at NVC and assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
-stargazer(RelTransport %>% select(NVC), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+stargazer(RelTransport2 %>% select(NVC), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
 ### National Rates for Vehicle Access
@@ -455,7 +487,7 @@ Based on both this and national ranges, we define:
 
 ```{r}
 # Score for NVC: % of households without a vehicle (lower is better)
-RelTransport <- RelTransport %>%
+RelTransport2 <- RelTransport2 %>%
   mutate(nvcScore = approx(
     x = c(25, 15, 8.5, 4, 0),   # descending because lower is better
     y = c(0, 25, 50, 75, 100),  # corresponding scores
@@ -464,7 +496,7 @@ RelTransport <- RelTransport %>%
   )$y)
 
 # Summary table for nvcScore
-score4 <- RelTransport %>% select(nvcScore)
+score4 <- RelTransport2 %>% select(nvcScore)
 stargazer(score4, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
@@ -477,7 +509,7 @@ This should be an easy one to interpret, as shorter travel times to work will be
 
 ```{r}
 # Look at TRV and assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
-stargazer(RelTransport %>% select(TRV), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+stargazer(RelTransport2 %>% select(TRV), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 ### National Rates for Commute Time
 According to the U.S. Census Bureau’s 2021 ACS 1-Year Estimates, the national average commute time in the United States was approximately 26.4 minutes. Commute times vary by geography:
@@ -502,7 +534,7 @@ We selected the following thresholds for scoring:
 ```{r}
 
 # Score for TRV: mean travel time to work (lower is better)
-RelTransport <- RelTransport %>%
+RelTransport2 <- RelTransport2 %>%
   mutate(trvScore = approx(
     x = c(35, 30, 26.4, 20, 15),
     y = c(0, 25, 50, 75, 100),
@@ -512,7 +544,7 @@ RelTransport <- RelTransport %>%
 
 
 # Summary table for trvScore
-score5 <- RelTransport %>% select(trvScore)
+score5 <- RelTransport2 %>% select(trvScore)
 stargazer(score5, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
@@ -523,7 +555,7 @@ stargazer(score5, type = 'text', summary.stat = c("n", "mean", "sd", "min", "med
 
 ```{r}
 # Look at EKW and assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
-stargazer(RelTransport %>% select(EKW), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+stargazer(RelTransport2 %>% select(EKW), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 ### National context for Walkability Index
 According to the Fox Valley Data Exchange, the EKW variable represents a walkability ranking based on intersection density, proximity to transit, diversity of nearby businesses, and housing density. It is sourced from the Environmental Justice Index, developed by the Agency for Toxic Substances and Disease Registry (ATSDR).
@@ -547,7 +579,7 @@ Based on both the dataset and the 1–20 scale from ATSDR, the following breakpo
 
 ```{r}
 # Score for EKW: Walkability index (higher is better)
-RelTransport <- RelTransport %>%
+RelTransport2 <- RelTransport2 %>%
   mutate(ekwScore = approx(
     x = c(3, 6, 9, 13, 16),
     y = c(0, 25, 50, 75, 100),
@@ -556,11 +588,69 @@ RelTransport <- RelTransport %>%
   )$y)
 
 # Summary table for ekwScore
-score6 <- RelTransport %>% select(ekwScore)
+score6 <- RelTransport2 %>% select(ekwScore)
 stargazer(score6, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
-# Map with using Sage's Scoring Suggestions
-to come...
+# Map using Sage's Scoring Suggestions
 
+
+
+```{r}
+library(tigris)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(viridis)
+
+options(tigris_use_cache = TRUE)
+
+# Set zoom limits
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Pull tracts from WI
+spatial <- tracts(state = "WI", class = "sf", year = 2023, progress_bar = FALSE)
+
+# Identify GEOIDs we care about
+zips <- unique(RelTransport2$GEOID)
+
+# Subset spatial layers
+foxZips <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(GEOID %in% zips)
+background <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(!GEOID %in% zips)
+
+# Build the new scoring index
+ind <- RelTransport2 %>%
+  select(GEOID, ends_with("Score")) %>%
+  rowwise() %>%
+  mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  st_drop_geometry() %>%  # drop geometry in case it's an sf already
+  left_join(foxZips, by = "GEOID") %>%
+  st_as_sf()
+
+# COUNTY OUTLINES
+county_outline <- counties(state = "WI", year = 2023, class = "sf") %>%
+  filter(NAME %in% c("Outagamie", "Winnebago", "Calumet"))
+
+# LAKES
+lakes <- rbind(
+  area_water(state = "WI", county = "Outagamie", year = 2023),
+  area_water(state = "WI", county = "Winnebago", year = 2023),
+  area_water(state = "WI", county = "Calumet", year = 2023)
+)
+
+# Final map using newIndex but with geographic features
+ggplot() +
+  geom_sf(data = county_outline, fill = "grey80", color = "white", linewidth = 0.2) +     # county background
+  geom_sf(data = ind, aes(fill = newIndex), color = "black", linewidth = 0.2) +           # data tracts
+  geom_sf(data = background, fill = NA, color = "grey95", color = "grey80", linewidth = 0.1) +              # background tracts
+  geom_sf(data = lakes, fill = "grey95", color = NA) +                                    # water bodies
+  scale_fill_viridis_c(name = "Transportation Index", limits = c(0, 100)) + ### not sure if it's right to set this scale for the color pallette here.
+  labs(title = "Map of Census Tracts by Composite Transportation Index") +
+  theme_minimal() +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+ 
+```
 
