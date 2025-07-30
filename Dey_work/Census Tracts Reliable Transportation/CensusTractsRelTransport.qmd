@@ -418,16 +418,147 @@ score3 <- RelTransport %>% select(pubScore)
 stargazer(score3, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
-# NCV
-to come...
+# NVC
+
+-   `NVC` This is the percentage of households without a vehicle
+```{r}
+# Look at NVC and assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
+stargazer(RelTransport %>% select(NVC), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+### National Rates for Vehicle Access
+
+According to U.S. Census Bureau data, approximately 8.5% of households in the U.S. had no vehicle available as of the 2020 American Community Survey (ACS) 5-Year Estimates.
+
+There is substantial variation across regions and cities:
+
+In dense urban areas like New York City, up to 55% of households do not have a vehicle.
+In contrast, rural and suburban regions may have 1–2% or fewer zero-vehicle households.
+The national median across tracts is much lower than 8.5% due to the geographic spread of car-dependent areas.
+Deciding weather higher or lower values are favourable for this variable is dificult. High percentage of households without cars may reflect either poverty or strong public transit infrastructure. Because we're scoring this in the context of reliable transportation access, lets say that higher percentages without a vehicle is less desirable especially for areas with poor transit options.
+
+### 0–100 Scale Transformation
+In this context, higher NVC values are considered worse, so the scoring scale is inverted: lower values are better.
+
+In our dataset:
+Mean = 4.78%
+Median = 3.20%
+Max = 27.04%
+Based on both this and national ranges, we define:
+
+30%+ = terrible (score = 0) — very high percentage with no vehicle
+15% = bad (score = 25)
+8.5% = average (score = 50) — matches national average
+4% = good (score = 75) — slightly below our dataset’s mean
+1% or less = ideal (score = 100)
+
+
+```{r}
+# Score for NVC: % of households without a vehicle (lower is better)
+RelTransport <- RelTransport %>%
+  mutate(nvcScore = approx(
+    x = c(25, 15, 8.5, 4, 0),   # descending because lower is better
+    y = c(0, 25, 50, 75, 100),  # corresponding scores
+    xout = NVC,
+    rule = 2
+  )$y)
+
+# Summary table for nvcScore
+score4 <- RelTransport %>% select(nvcScore)
+stargazer(score4, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
 
 # TRV
-to come...
+
+-   `TRV` This is the mean travel time to work.
+
+This should be an easy one to interpret, as shorter travel times to work will be considered favorable in most circumstances.
+
+```{r}
+# Look at TRV and assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
+stargazer(RelTransport %>% select(TRV), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+### National Rates for Commute Time
+According to the U.S. Census Bureau’s 2021 ACS 1-Year Estimates, the national average commute time in the United States was approximately 26.4 minutes. Commute times vary by geography:
+
+In large metro areas (e.g., New York, Washington D.C., Los Angeles), commute times often exceed 35 minutes.
+In smaller cities and rural areas, commutes can be as short as 10–15 minutes.
+
+
+# 0–100 Scale Transformation
+Because shorter commutes are preferred, the scoring system is inversely scaled—lower values receive higher scores.
+
+Our dataset ranges from 11.8 to 31.7 minutes, with a mean of ~19.9 and a median of ~19.1, which is well below the national average. This suggests our study area experiences relatively short commute times overall.
+
+We selected the following thresholds for scoring:
+
+35 minutes or more = terrible (score = 0)
+30 minutes = bad (score = 25)
+26.4 minutes = average (score = 50) — matches national average
+20 minutes = good (score = 75) — slightly above our local median
+15 minutes or less = ideal (score = 100)
+
+```{r}
+
+# Score for TRV: mean travel time to work (lower is better)
+RelTransport <- RelTransport %>%
+  mutate(trvScore = approx(
+    x = c(35, 30, 26.4, 20, 15),
+    y = c(0, 25, 50, 75, 100),
+    xout = TRV,
+    rule = 2
+  )$y)
+
+
+# Summary table for trvScore
+score5 <- RelTransport %>% select(trvScore)
+stargazer(score5, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
 
 # EKW
-to come...
+
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+
+```{r}
+# Look at EKW and assign the proper values to  "ideal", "good", "average", "bad" and "terrible" points.
+stargazer(RelTransport %>% select(EKW), type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+### National context for Walkability Index
+According to the Fox Valley Data Exchange, the EKW variable represents a walkability ranking based on intersection density, proximity to transit, diversity of nearby businesses, and housing density. It is sourced from the Environmental Justice Index, developed by the Agency for Toxic Substances and Disease Registry (ATSDR).
+
+Values range from 1 to 20, with 20 representing the most walkable environments—typically dense, mixed-use urban areas—and 1 representing very car-dependent, low-connectivity zones.
+
+Our dataset ranges from 3.67 to 15.92, with a mean of ~8.57 and a median of ~7.99, suggesting that most census tracts fall in the moderate range of walkability. Tracts near or above 15 are strong outliers and likely represent downtown cores or neighborhoods with compact, transit-rich design.
+
+## 0–100 Scale Transformation
+
+Since higher walkability is a favorable outcome, the scoring increases with EKW.
+
+Based on both the dataset and the 1–20 scale from ATSDR, the following breakpoints were chosen:
+
+3 or below = terrible (score = 0) — very limited walkability
+6 = bad (score = 25) — below dataset median
+9 = average (score = 50) — near dataset mean
+13 = good (score = 75)
+16 or above = ideal (score = 100) — strong walkable tracts, close to scale maximum
 
 
+```{r}
+# Score for EKW: Walkability index (higher is better)
+RelTransport <- RelTransport %>%
+  mutate(ekwScore = approx(
+    x = c(3, 6, 9, 13, 16),
+    y = c(0, 25, 50, 75, 100),
+    xout = EKW,
+    rule = 2
+  )$y)
+
+# Summary table for ekwScore
+score6 <- RelTransport %>% select(ekwScore)
+stargazer(score6, type = 'text', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
 
 # Map with using Sage's Scoring Suggestions
 to come...
