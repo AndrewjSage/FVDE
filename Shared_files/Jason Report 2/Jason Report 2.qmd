@@ -93,7 +93,163 @@ stargazer(hhSumm, title="Summary Stats", type = 'latex', summary.stat = c("n","m
 
 Per our discussions last time, our index would contain variables that encompasses affordability, safety, stability, diversity and accessibility. In the time constraint given, I have selected 5 variables that cover most of our bases, which are:
 
+### Variable 1: Housing Costs:
+
+Absolute rent levels mean nothing if we are talking about a national scale - the sole addition of Manhattan's tracts will throw our entire proposed scale off balance. If this is the case, we should probably think of something a little more income-based. Using 2 variables: median housing costs `MHC` and median household income `INC` (from a new hh census tracts file), we can find the housing cost to income ratio.
+
+Some searches reveal that US' best cities tend to have a rent-to-income ratio of \~13% while the worst ones (New York, Miami, Seattle) would be way north of 50%, even 60%. Knowing that MHC is inclusive of mortgages, but also other fees and taxes, I would push this estimate a little to the right: our "ideal" would be any tract with the ratio less than 15%, our "terrible" would be any tract with a ratio of 50% or higher. 30% is proposed as the highest proportion of monthly income the average person should spend on rent, so we would leave it as our "average". That leaves us with 23% as the "good" benchmark and 40% as the "bad" threshold.
+
+With the new paradigm in place, here is a table showing the distribution of the score:
+
+```{r, results='asis'}
+# Creating another column calculating the ratio:
+hh <- hh %>% mutate(icPct = MHC/(INC/12)*100, icScore = approx(x=c(15,23,30,40,50), y=c(100,75,50,25,0), xout=icPct, rule=2)$y)
+
+score1 <- hh %>% select(icScore)
+stargazer(score1, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+A median value of almost 96 –\> Very right skewed. However, this tracks with our expectations of Wisconsin/the Midwest in general. We do have very affordable housing in comparison with other areas in the US.
+
+### Variable 2: Eviction Rates
+
+This is also a good proxy for housing availability and stability. However, there are some nuances and considerations to account for working with eviction rates:
+
+-   Eviction can mean many things: it can be the filing of the legal process that removes tenants from a property, it can also be the actual removal of such residents from their homes.
+
+-   Some jurisdictions allow landlords to file multiple eviction notices, strongly skewing extreme values (some Maryland counties report a 147% eviction rate, for example).
+
+-   However, the bulk of values (both external and from the dataset) seem to be on the low end, so the thresholds will reflect that.
+
+Currently, the thresholds for ideal/good/average/bad/terrible are: 0%/1%/3%/7%/13%. Similarly, here is a table showing the summary statistics of this new metric:
+
+```{r, results='asis'}
+hh <- hh %>% mutate(evScore = approx(x=c(0,1,3,7,13), y=c(100,75,50,25,0), xout=EVR, rule=2)$y)
+score2 <- hh %>% select(evScore)
+stargazer(score2, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+## Variable 3: Home Ownership Rates
+
+As noted by Jason, home ownership rates is a very important metric for humane housing, partly because it's a nice proxy to more humane conditions. There are still some considerations regarding this variable though:
+
+-   Higher `HUO` rates might indicate higher neighborhood stability, but also lack of rental housing.
+
+-   Tracts and areas with transient populations (like dorms and institutional quarters) might have disproportionately low levels of `HUO`, and therefore should be addressed appropriately. I am currently choosing to skip these outliers.
+
+Similar to other variables, I am including the summary statistics table below:
+
+```{r, results='asis'}
+hh <- hh %>% mutate(hoScore = case_when(
+      HUO < 20 ~ NA_real_,
+      TRUE ~ approx(
+        x    = c(20, 40, 60, 80, 90),
+        y    = c(0, 20, 50, 80, 100),
+        xout = HUO,
+        rule = 2
+      )$y))
+score3 <- hh %>% select(hoScore)
+stargazer(score3, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+### Variable 4: Mean Travel Time
+
+This variable seems to be the most straightforward to create an index from. Some research has confirmed that any commute less than 16 minutes is ideal, and 60+ commutes to be harmful, so we know where to place our thresholds. Here is another table that shows the distribution of our score:
+
+```{r, results='asis'}
+hh <- hh %>% mutate(trScore = approx(
+        x    = c(16, 20, 25, 35, 60),
+        y    = c(100,  80, 50, 20,0),
+        xout = TRV,
+        rule = 2
+      )$y)
+score4 <- hh %>% select(trScore)
+stargazer(score4, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
+### Variable 5: Diversity
+
+The last variable explicitly mentioned by Jason is that of racial/ethnic diversity. Though arguments can be made against our current prior that more diversity is conducive to more humane housing, we are still pursuing such a paradigm. Knowing that the highest possible value is 0.875, we should turn to other sources of data and examine the ranges of possible values.
+
+The biggest, most diverse cities in the country like New York and LA tend to have a `REX` of 0.75 and higher. Conversely, counties like Laredo, Texas, with a predominantly hispanic population would only come in at 0.1 or lower on the scale. Given that this is the case, my current suggestion for the thresholds are 0.15, 0.25, 0.5, 0.65 and 0.75 for conditions ranging from terrible to ideal. Below is a table showing us the distribution of `REX` scores across different tracts of our dataset.
+
+```{r, results='asis'}
+hh <- hh %>%
+  mutate(diScore = approx(
+    x    = c(0.15, 0.25, 0.50, 0.65, 0.75),
+    y    = c(0,    20,   50,   80,  100),
+    xout = REX,
+    rule = 2
+  )$y)
+score5 <- hh %>% select(diScore)
+stargazer(score5, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
+```
+
 ## New Index Analysis:
+
+With our 5 variables selected, here is a map containing the average of the new scores for each census tracts and a table containing the top and bottom 10 tracts along with individual scores:
+
+```{r, fig.width=10, fig.height=10}
+# Arbitrary limits decided by Mina (so, not arbitrary)
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+ind <- hh %>%  select(GEOID, ends_with("Score")) %>%  
+  rowwise() %>%  mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>% 
+  ungroup() %>%  arrange(desc(newIndex))
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hh$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+# joining the data tables together
+ind <- ind %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
+
+ind <- ind %>% st_as_sf()
+
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = ind, aes(fill = newIndex), color="black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  scale_fill_viridis_c() + 
+  labs(title = "Map of Census Tracts by New Housing Index") +
+  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
+```{r}
+# Drop geometry, rename columns, keep only the scores
+scoreTbl <- ind %>% 
+  st_drop_geometry() %>% 
+  rename(
+    Tract           = GEOID,
+    CostIncome = icScore,
+    Eviction   = evScore,
+    Ownership  = hoScore,
+    Commute   = trScore,
+    Diversity  = diScore,
+    Overall    = newIndex
+  ) %>% 
+  select(Tract, CostIncome, Eviction, Ownership,
+         Commute, Diversity, Overall)
+
+# Slice out top-10 and bottom-10
+top10    <- scoreTbl %>% arrange(desc(Overall)) %>% slice_head(n = 10)
+bottom10 <- scoreTbl %>% arrange(Overall)        %>% slice_head(n = 10)
+
+# Render with kable, putting most args on one line
+knitr::kable(top10,    caption = "Top 10 Tracts",    digits = 1, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE)
+
+
+knitr::kable(bottom10, caption = "Bottom 10 Tracts", digits = 1, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE)
+```
 
 \newpage
 
