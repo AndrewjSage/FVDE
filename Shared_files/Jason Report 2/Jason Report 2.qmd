@@ -1,11 +1,11 @@
 ---
 title: "FVDE Progress Report 2"
-author: vub23, mina-cheese & Dey
+author: Binh, Mina & Dey
 format: pdf
 ---
 
 ```{r setup, include=F}
-knitr::opts_chunk$set(echo = F, message=FALSE, warning=FALSE, fig.height = 10)
+knitr::opts_chunk$set(echo = F, message=FALSE, warning=FALSE)
 options(scipen = 5)
 library(tidyverse)
 library(stargazer)
@@ -17,16 +17,21 @@ library(factoextra)
 library(kableExtra)
 ```
 
-This project will contain the progress we have made over the last week and a half. Per Prof. Sage's advice, we have chosen to go with a new scoring paradigm that ranks census tracts from 0 to 100 in comparison to national standards, instead of relying on z-scores. We will also look at the outliers of each vital index.
+# Overview:
 
-\newpage
+This is our second report, incorporating feedback and comments from our 1st meeting and additional team meetings with Professor Sage. Here are the broad strokes of what we've done over the last few weeks:
+
+-   We moved from analyzing zipcodes to census tracts.
+
+-   We replaced the old z-score paradigm with a new 0-100 scoring system that accounted for national averages and trends.
+
+-   We analyzed some of the observed changes and differences when applying our new index scoring paradigm.
 
 # Humane Housing
 
-For this report, I've chosen 5 variables that are the closest proxies to more humane housing outcomes and created my own scoring system that ranges from 0 to 100. Most of my rationale are included below. Additionally, differences in variable distributions and scores moving from Zipcodes to Census Tracts divisions will be mentioned.
-
 ## Census Tracts Dataset:
 
+We begin with some exploratory data analysis on the census tracts dataset.
 ```{r}
 # Read csv file
 hh <- read.csv("hh tracts 2.csv")
@@ -39,12 +44,9 @@ names(hh) <- sub("_.*$", "", names(hh))
 hhCorr <- hh %>% select(-HCP) %>% na.omit()
 hhSumm <- hh %>% select(-GEOID)
 ```
-
 ### Correlation plots and Histograms:
-
 Below is the correlation plot for numeric variables:
-
-```{r corrplot, fig.width=10, fig.height=10}
+```{r corrplot, fig.width=10, fig.height=10, fig.pos='H'}
 A = cor(hhCorr)
 corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
@@ -97,9 +99,7 @@ Per our discussions last time, our index would contain variables that encompasse
 
 Absolute rent levels mean nothing if we are talking about a national scale - the sole addition of Manhattan's tracts will throw our entire proposed scale off balance. If this is the case, we should probably think of something a little more income-based. Using 2 variables: median housing costs `MHC` and median household income `INC` (from a new hh census tracts file), we can find the housing cost to income ratio.
 
-Some searches reveal that US' best cities tend to have a rent-to-income ratio of \~13% while the worst ones (New York, Miami, Seattle) would be way north of 50%, even 60%. Knowing that MHC is inclusive of mortgages, but also other fees and taxes, I would push this estimate a little to the right: our "ideal" would be any tract with the ratio less than 15%, our "terrible" would be any tract with a ratio of 50% or higher. 30% is proposed as the highest proportion of monthly income the average person should spend on rent, so we would leave it as our "average". That leaves us with 23% as the "good" benchmark and 40% as the "bad" threshold.
-
-With the new paradigm in place, here is a table showing the distribution of the score:
+Some searches reveal that US' best cities tend to have a rent-to-income ratio of \~13% while the worst ones (New York, Miami, Seattle) would be way north of 50%, even 60%. Knowing that MHC is inclusive of mortgages, but also other fees and taxes, I would push this estimate a little to the right: our "ideal" would be any tract with the ratio less than 15%, our "terrible" would be any tract with a ratio of 50% or higher. 30% is proposed as the highest proportion of monthly income the average person should spend on rent, so we would leave it as our "average". That leaves us with 23% as the "good" benchmark and 40% as the "bad" threshold. Below is a table showing the summary statistics of the new rent score:
 
 ```{r, results='asis'}
 # Creating another column calculating the ratio:
@@ -109,11 +109,11 @@ score1 <- hh %>% select(icScore)
 stargazer(score1, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
 ```
 
-A median value of almost 96 –\> Very right skewed. However, this tracks with our expectations of Wisconsin/the Midwest in general. We do have very affordable housing in comparison with other areas in the US.
+A median value of almost 96 –\> Very right skewed. However, **this tracks with our expectations of Wisconsin/the Midwest in general**. We do have very affordable housing in comparison with other areas in the US.
 
 ### Variable 2: Eviction Rates
 
-This is also a good proxy for housing availability and stability. However, there are some nuances and considerations to account for working with eviction rates:
+Eviction rates is also a good proxy for housing availability and stability. However, there are some nuances and considerations to account for working with such a variable:
 
 -   Eviction can mean many things: it can be the filing of the legal process that removes tenants from a property, it can also be the actual removal of such residents from their homes.
 
@@ -121,7 +121,7 @@ This is also a good proxy for housing availability and stability. However, there
 
 -   However, the bulk of values (both external and from the dataset) seem to be on the low end, so the thresholds will reflect that.
 
-Currently, the thresholds for ideal/good/average/bad/terrible are: 0%/1%/3%/7%/13%. Similarly, here is a table showing the summary statistics of this new metric:
+Currently, the thresholds for ideal/good/average/bad/terrible are 0%/1%/3%/7%/13%. Below is a table showing how the new index applies to our census tract data:
 
 ```{r, results='asis'}
 hh <- hh %>% mutate(evScore = approx(x=c(0,1,3,7,13), y=c(100,75,50,25,0), xout=EVR, rule=2)$y)
@@ -131,20 +131,20 @@ stargazer(score2, type = 'latex', summary.stat = c("n","mean","sd", "min", "medi
 
 ### Variable 3: Home Ownership Rates
 
-As noted by Jason, home ownership rates is a very important metric for humane housing, partly because it's a nice proxy to more humane conditions. There are still some considerations regarding this variable though:
+As noted by Jason, home ownership rates is a very important metric for housing affordability. There are still some considerations regarding this variable though:
 
 -   Higher `HUO` rates might indicate higher neighborhood stability, but also lack of rental housing.
 
 -   Tracts and areas with transient populations (like dorms and institutional quarters) might have disproportionately low levels of `HUO`, and therefore should be addressed appropriately. I am currently choosing to skip these outliers.
 
-Similar to other variables, I am including the summary statistics table below:
+Similar to other variables, the summary statistics table is included below:
 
 ```{r, results='asis'}
 hh <- hh %>% mutate(hoScore = case_when(
       HUO < 20 ~ NA_real_,
       TRUE ~ approx(
         x    = c(20, 40, 60, 80, 90),
-        y    = c(0, 20, 50, 80, 100),
+        y    = c(0, 25, 50, 75, 100),
         xout = HUO,
         rule = 2
       )$y))
@@ -154,12 +154,12 @@ stargazer(score3, type = 'latex', summary.stat = c("n","mean","sd", "min", "medi
 
 ### Variable 4: Mean Travel Time
 
-This variable seems to be the most straightforward to create an index from. Some research has confirmed that any commute less than 16 minutes is ideal, and 60+ commutes to be harmful, so we know where to place our thresholds. Here is another table that shows the distribution of our score:
+This variable seems to be the most straightforward to create an index from. A quick search confirmed that any commute less than 16 minutes is ideal, and 60+ commutes to be harmful, so we know where to place our thresholds. Here is another table that shows the distribution of our score:
 
 ```{r, results='asis'}
 hh <- hh %>% mutate(trScore = approx(
         x    = c(16, 20, 25, 35, 60),
-        y    = c(100,  80, 50, 20,0),
+        y    = c(100,  75, 50, 25,0),
         xout = TRV,
         rule = 2
       )$y)
@@ -169,15 +169,13 @@ stargazer(score4, type = 'latex', summary.stat = c("n","mean","sd", "min", "medi
 
 ### Variable 5: Diversity
 
-The last variable explicitly mentioned by Jason is that of racial/ethnic diversity. Though arguments can be made against our current prior that more diversity is conducive to more humane housing, we are still pursuing such a paradigm. Knowing that the highest possible value is 0.875, we should turn to other sources of data and examine the ranges of possible values.
-
-The biggest, most diverse cities in the country like New York and LA tend to have a `REX` of 0.75 and higher. Conversely, counties like Laredo, Texas, with a predominantly hispanic population would only come in at 0.1 or lower on the scale. Given that this is the case, my current suggestion for the thresholds are 0.15, 0.25, 0.5, 0.65 and 0.75 for conditions ranging from terrible to ideal. Below is a table showing us the distribution of `REX` scores across different tracts of our dataset.
+The last variable explicitly mentioned by Jason in our search is diversity. Knowing that the highest possible value is 0.875, we should turn to other sources of data and examine the ranges of possible values. The biggest, most diverse cities in the country like New York and LA tend to have a `REX` of 0.75 and higher. Conversely, counties like Laredo, Texas, with a predominantly Hispanic population would only come in at 0.1 or even lower on the scale. Given that this is the case, my current suggestion for the thresholds are 0.15, 0.25, 0.5, 0.65 and 0.75 for conditions ranging from terrible to ideal. Below is a table showing us the distribution of `REX` scores across different tracts of our dataset.
 
 ```{r, results='asis'}
 hh <- hh %>%
   mutate(diScore = approx(
     x    = c(0.15, 0.25, 0.50, 0.65, 0.75),
-    y    = c(0,    20,   50,   80,  100),
+    y    = c(0,    25,   50,   75,  100),
     xout = REX,
     rule = 2
   )$y)
@@ -185,20 +183,65 @@ score5 <- hh %>% select(diScore)
 stargazer(score5, type = 'latex', summary.stat = c("n","mean","sd", "min", "median", "max"), notes.append=F, header=F)
 ```
 
+With the new index applied to the 5 selected variables, here are graphs that establish the different baselines for each variable (notice the different x-axes for each variable):
+
+```{r, fig.height=4, fig.width=15}
+# Define the data for each plot in a list of data frames
+plotDataList <- list(
+  `Cost / Income Ratio (%)` = tibble(
+    Value = c(15, 23, 30, 40, 50),
+    Score = c(100, 75, 50, 25, 0)
+  ),
+  `Eviction Rate (%)` = tibble(
+    Value = c(0, 1, 3, 7, 13),
+    Score = c(100, 75, 50, 25, 0)
+  ),
+  `Home Ownership (%)` = tibble(
+    Value = c(20, 40, 60, 80, 90),
+    Score = c(0, 25, 50, 75, 100)
+  ),
+  `Commute Time (min)` = tibble(
+    Value = c(16, 20, 25, 35, 60),
+    Score = c(100, 75, 50, 25, 0)
+  ),
+  `Diversity Index` = tibble(
+    Value = c(0.15, 0.25, 0.50, 0.65, 0.75),
+    Score = c(0, 25, 50, 75, 100)
+))
+
+# Use imap to loop through the list, creating a plot for each item.
+scorePlots <- imap(plotDataList, ~ {
+  ggplot(data = .x, aes(x = Value, y = Score)) +
+    geom_line() +
+    geom_point(size = 2.5) +
+    labs(title = .y, x = "Variable Value", y = "Condition Score") +
+    theme_bw() +
+    scale_y_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+    theme(strip.background = element_blank())
+})
+
+# Combine the individual plots into a single row.
+wrap_plots(scorePlots, ncol = 5)
+```
+
+The current index adapts the proposed weighting scheme to our five selected variables. While other relevant metrics exist in the dataset (like food insecurity), they were pruned for the sake of time and brevity. Future reports will incorporate these additional factors to create a more robust model. For this report only, the weights for the variables are:
+
+1 \* Income/Rent, 1 \* Home Ownership, 0.5 \* Eviction Rate, 0.5 \* Commute Time, 0.5 \* Diversity.
+
+This total is then divided by 3.5 to get a humane housing index going from 0 to 100.
+
 \newpage
 
 ## New Index Analysis:
 
-With our 5 variables selected, here is a map containing the average of the new scores for each census tracts and a table containing the top and bottom 10 tracts along with individual scores:
+With our 5 variables selected, here is a map containing the new humane housing score for each census tracts and a table containing the top and bottom 10 tracts along with individual scores:
 
 ```{r, fig.width=10, fig.height=10}
 # Arbitrary limits decided by Mina (so, not arbitrary)
 zoom_xlim <- c(-89, -88)
 zoom_ylim <- c(43.8, 44.7)
 
-ind <- hh %>%  select(GEOID, ends_with("Score")) %>%  
-  rowwise() %>%  mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>% 
-  ungroup() %>%  arrange(desc(newIndex))
+ind <- hh %>%  select(GEOID, ends_with("Score")) %>% mutate(newIndex = (icScore + hoScore + (0.50 * trScore) + (0.50 * diScore) + (0.50 * evScore)) / 3.50)  %>%  arrange(desc(newIndex))
 
 # Getting spatial data from tigris, zcta was found from reading the documentation
 zips <- unique(hh$GEOID)
@@ -259,13 +302,12 @@ There are some observations about the best and worst humane housing performers w
 
 -   The census tract with the highest humane housing index is tract 9400, which is on the Oneida reservation. It led other census tracts not only in terms of affordability but also diversity, which is the reason why it got the highest average score.
 
--   Looking at other tracts in the top 10 table, we can see that they are performing well not because of, but in spite of the diversity score: 6/10 tracts have a diversity index of less than 30/100. This is expected for small areas in a state like Wisconsin, potentially meriting some further investigation into the best way to account for diversity.
+-   Looking at other tracts in the top 10 table, we can see that they are performing well not because of, but in spite of the diversity score: 5/10 tracts have a diversity index of less than 12/100. This is expected for small areas in a state like Wisconsin, potentially meriting some further investigation into the best way to account for diversity.
 
 -   As for census tracts in the bottom 10, a consistent trend among these areas is low home ownership scores. Though the metric can be distorted by the presence of institution quarters and dorms, they also imply housing instability and understandably less humane housing outcomes.
 
 -   There are also tracts in the bottom 10 which are designated opportunity zones - less fortunate areas which have received federal assistance and funding.
 
-\newpage
 
 # Lifelong Learning
 
@@ -302,7 +344,7 @@ Good news! There are basically no `NA` entries in this dataset at all, so we do 
 
 ### Correlation Plots
 
-```{r, fig.width=6, fig.height=6}
+```{r, fig.width=5, fig.height=5}
 # there is one NA entry in EDG. Thus, we must remove it.
 ballsCorr <- ballsAnal |> na.omit()
 
@@ -458,22 +500,18 @@ The highest index belongs to tract 31 in Winnebago, while the lowest index belon
 
 I would also like to point out tract 9400, which is on the Oneida Reservation, meaning they have a high population of Native Americans. Namely, the humane housing is the highest, while the lifelong learning index is the second lowest. While many Native Americans attend middle and high school, their drop out rates are disproportionately high, according to the Bureau of Indian Affairs. Post-secondary education graduation rate is even lower, leading to a very low overall lifelong learning index. Indeed, we can see this in the data--only 51.7% of people here have experience in any higher education `EDC`, any only 16.1% have graduated college `EDE`.
 
-
 \newpage
 
 # Reliable Transportation
 
 Here is the list of Variables that we will be working with and their definitions.
 
-
--   `ACT`  This is the percentage of workers who walk or bike to work
+-   `ACT` This is the percentage of workers who walk or bike to work
 -   `CAR` This is the percentage of workers who drive alone to work
 -   `PUB` This is the percentage of workers using public transit
 -   `NVC` This is the percentage of households without a vehicle
 -   `TRV` This is the mean travel time to work.
 -   `EKW` This is the walkability index, where higher values indicate higher walkability.
-
-
 
 ```{r}
 # Function to take the column names
@@ -492,10 +530,7 @@ RelTransportCorr <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% n
 RelTransportSumm <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
 ```
 
-
-
 ### Correlation Plot:
-
 
 ```{r, fig.width=10, fig.height=10}
 
@@ -503,14 +538,9 @@ A = cor(RelTransportCorr)
 corrplot(A, method='color', order = 'AOE', type='upper', addCoef.col = 'black')
 ```
 
-ACT (walk/bike) and NVC (no vehicle access) show a strong positive correlation, suggesting areas with more active commuting also have more households without cars.
-Walkability (EKW) is moderately to strongly correlated with ACT, NVC, and PUB, supporting the idea that more walkable areas promote alternative transportation modes.
-TRV (travel time) is negatively correlated with EKW and PUB, indicating that walkable and transit-accessible areas tend to have shorter commutes.
-CAR (drive alone) remains negatively correlated with ACT, PUB, and NVC, but these relationships are somewhat weaker than in the ZIP-level data, possibly due to more localized variation.
-Overall, the matrix highlights similar trends as the ZIP-level report but with sharper contrasts.
+ACT (walk/bike) and NVC (no vehicle access) show a strong positive correlation, suggesting areas with more active commuting also have more households without cars. Walkability (EKW) is moderately to strongly correlated with ACT, NVC, and PUB, supporting the idea that more walkable areas promote alternative transportation modes. TRV (travel time) is negatively correlated with EKW and PUB, indicating that walkable and transit-accessible areas tend to have shorter commutes. CAR (drive alone) remains negatively correlated with ACT, PUB, and NVC, but these relationships are somewhat weaker than in the ZIP-level data, possibly due to more localized variation. Overall, the matrix highlights similar trends as the ZIP-level report but with sharper contrasts.
 
 ### Histograms
-
 
 ```{r, fig.width=12, fig.height=10}
 RelTransportvars <- c(
@@ -537,14 +567,10 @@ RelTransportplots <- map(RelTransportvars, ~{
 
 wrap_plots(RelTransportplots, ncol = 4, nrow = 4) 
 ```
+
 Observations:
 
-ACT, PUB, and NVC are all strongly right-skewed, indicating that most census tracts have low levels of walking/biking, transit use, and households without vehicles, with only a few areas showing high values.
-CAR remains tightly distributed and slightly left-skewed, reflecting that driving alone is still the dominant commuting mode in most tracts.
-TRV shows a moderate right skew, meaning most commute times are on the shorter side, but a few tracts have longer travel times.
-EKW (walkability) appears more balanced, roughly normal, with a slight right skew—most tracts have moderate walkability, but some urban cores are significantly more walkable.
-As with the ZIP-level results, highly skewed variables like PUB may contribute noise in rural tracts and might benefit from transformation or adjusted weighting in the index.
-
+ACT, PUB, and NVC are all strongly right-skewed, indicating that most census tracts have low levels of walking/biking, transit use, and households without vehicles, with only a few areas showing high values. CAR remains tightly distributed and slightly left-skewed, reflecting that driving alone is still the dominant commuting mode in most tracts. TRV shows a moderate right skew, meaning most commute times are on the shorter side, but a few tracts have longer travel times. EKW (walkability) appears more balanced, roughly normal, with a slight right skew—most tracts have moderate walkability, but some urban cores are significantly more walkable. As with the ZIP-level results, highly skewed variables like PUB may contribute noise in rural tracts and might benefit from transformation or adjusted weighting in the index.
 
 ### Summary Statistics
 
@@ -600,6 +626,7 @@ statTbl %>%
 ```
 
 ## New Indexing System
+
 ```{r}
 # Function to take the column names
 colnames2 <- names(read.csv("TransportationCensusTracts2.csv", nrows = 0))
@@ -617,15 +644,11 @@ RelTransportCorr2 <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% 
 RelTransportSumm2 <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
 ```
 
-For this next section I will apply the new variable scoring method discussed in our last meeting to the topic of reliable transportation. 
-The approach involves assigning scores based on thresholds I've chosen after some research.
-Scores will be scaled from 0 to 100, where 0 reflects the least favorable transportation conditions and 100 reflects the most favorable, based on national comparisons. Thresholds for categories like “ideal,” “good,” “average,” “bad,” and “terrible” are chosen using a combination of outside research, logical reasoning, and the shape of each variable’s distribution.
+For this next section I will apply the new variable scoring method discussed in our last meeting to the topic of reliable transportation. The approach involves assigning scores based on thresholds I've chosen after some research. Scores will be scaled from 0 to 100, where 0 reflects the least favorable transportation conditions and 100 reflects the most favorable, based on national comparisons. Thresholds for categories like “ideal,” “good,” “average,” “bad,” and “terrible” are chosen using a combination of outside research, logical reasoning, and the shape of each variable’s distribution.
 
-I will beging this process for each of the 6 Transportation related variables and explain the process along the way. 
-## Variable 1: ACT
+I will beging this process for each of the 6 Transportation related variables and explain the process along the way. \## Variable 1: ACT
 
--   `ACT`  This is the percentage of workers who walk or bike to work
-
+-   `ACT` This is the percentage of workers who walk or bike to work
 
 ### National Benchmarks for Walking/Biking to Work
 
@@ -633,15 +656,14 @@ Here is some information about average walking and biking-to-work rates in the U
 
 Additional data from [Census.gov](https://www.census.gov/library/stories/2019/05/younger-workers-in-cities-more-likely-to-bike-to-work.html) notes that several cities with high biking rates tend to have large university populations. For example, in Davis, California, nearly 20% of workers commute by bicycle, and in Boulder, Colorado, the rate is 10.4%.
 
-A separate article from [Census.gov](https://www.census.gov/newsroom/blogs/random-samplings/2014/05/where-do-people-bike-walk-to-work-college-towns.html)
- focuses more on walking, reporting that in Ithaca, New York—home to Cornell University—more than 42% of commuters walk to work. Cambridge, Massachusetts, which includes Harvard and MIT, sees 24% of its workers commuting on foot. These examples highlight how city type and population characteristics influence walk/bike rates.
+A separate article from [Census.gov](https://www.census.gov/newsroom/blogs/random-samplings/2014/05/where-do-people-bike-walk-to-work-college-towns.html) focuses more on walking, reporting that in Ithaca, New York—home to Cornell University—more than 42% of commuters walk to work. Cambridge, Massachusetts, which includes Harvard and MIT, sees 24% of its workers commuting on foot. These examples highlight how city type and population characteristics influence walk/bike rates.
 
 ### 0-100 scale transformation
 
-To translate the ACT variable into a 0–100 score, we can select five threshold values based on the observed distribution. Based on our Dataset, A score of 0 is assigned to census tracts where no workers walk or bike to work, while 1% is considered poor (score of 25). The midpoint score of 50 is set at 3.5%, which closely matches the dataset’s mean. A value of 7% reflects a relatively high rate and is scored as 75. Finally, 15% or above is considered ideal.
-These would be the points based on the distibution of our data, but if we compare with national benchmarks we can adjust these points accordingly. 
+To translate the ACT variable into a 0–100 score, we can select five threshold values based on the observed distribution. Based on our Dataset, A score of 0 is assigned to census tracts where no workers walk or bike to work, while 1% is considered poor (score of 25). The midpoint score of 50 is set at 3.5%, which closely matches the dataset’s mean. A value of 7% reflects a relatively high rate and is scored as 75. Finally, 15% or above is considered ideal. These would be the points based on the distibution of our data, but if we compare with national benchmarks we can adjust these points accordingly.
 
 #### adjust using national rates
+
 After reviewing national averages, I made several adjustments to align our scoring more closely with real-world commuting trends. Nationally, around 2.9% of people walk or bike to work combined, with rates above 10–20% typically found only in exceptional cities like Davis or Ithaca.
 
 Therefore, I updated the benchmarks as follows:
@@ -655,7 +677,6 @@ Therefore, I updated the benchmarks as follows:
 7%, which is much higher than national average, is considered “good” (score = 75).
 
 17%, based on high-performing outliers like Davis, CA, is set as “ideal” (score = 100).
-
 
 ```{r results='asis'}
 # Score for ACT: % of workers who walk or bike to work
@@ -673,30 +694,23 @@ stargazer(score1, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "me
 
 ```
 
-
 ## CAR
 
 -   `CAR` This is the percentage of workers who drive alone to work
 
-
-### Compare to National Rates 
+### Compare to National Rates
 
 According to data from the U.S. Census Bureau, the average rate of people who drove alone to work in 2019 was approximately 76%. This rate dropped to around 68% in 2022 due to the COVID-19 pandemic and increased remote work. For the purpose of this scoring system, we will use 76% as the national benchmark for "average" commuting behavior.
 
 Driving alone tends to be more common in suburban and rural areas, where public transit, walkability, and other transportation alternatives are limited. Therefore, higher values for this variable generally reflect lower transportation diversity and less sustainable commuting options.
 
-
 ### 0–100 Scale Transformation
+
 Although this may be subjective, lets say that high rates of driving alone are undesirable. Therefore, the scoring scale is reversed: lower values receive higher scores, and higher values receive lower scores.
 
 Based on our dataset, which ranges from about 44% to 91%, and the national benchmark of 76%, we chose the following breakpoints:
 
-90% or more is considered terrible (score = 0)
-82% reflects bad conditions (score = 25)
-76%, the national average, is set as average (score = 50)
-65% is considered good (score = 75)
-50% or below reflects ideal conditions (score = 100)
-
+90% or more is considered terrible (score = 0) 82% reflects bad conditions (score = 25) 76%, the national average, is set as average (score = 50) 65% is considered good (score = 75) 50% or below reflects ideal conditions (score = 100)
 
 ```{r results='asis'}
 # Score for CAR: % of workers who drive alone to work
@@ -721,23 +735,17 @@ stargazer(score2, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "me
 
 According to the [U.S. Census Bureau](https://www.census.gov/content/dam/Census/library/publications/2021/acs/acs-48.pdf), around 5% of U.S. workers used public transportation to get to work as of the most recent American Community Survey (ACS) data. This average masks significant regional variation:
 
-In the Northeastern U.S., public transit usage is higher, with an overall average of 14.3%, and up to 35% in metro areas (principal cities).
-In contrast, the Southern U.S. shows much lower averages—around 2% overall, and as low as 0.3% outside metro areas.
-
+In the Northeastern U.S., public transit usage is higher, with an overall average of 14.3%, and up to 35% in metro areas (principal cities). In contrast, the Southern U.S. shows much lower averages—around 2% overall, and as low as 0.3% outside metro areas.
 
 ### 0–100 Scale Transformation
+
 Higher percentages of public transit use are considered more favorable for transportation equity, sustainability, and reliability. Therefore, the scoring scale increases with increasing values.
 
 Our dataset has a mean of 0.56%, a median of 0%, and a maximum of only 7.5%, which is far below national averages. This suggests that most tracts in our sample rely heavily on private vehicles, and that even a modest amount of transit use is above average in this context.
 
 Using both the national context and our local distribution, we set the following thresholds:
 
-0% = terrible (score = 0)
-0.5% = bad (score = 25) — roughly aligns with our dataset's mean
-2% = average (score = 50) — below national average but high for our data
-5% = good (score = 75) — national average
-10% = ideal (score = 100) — rare but achievable in well-served urban areas
-
+0% = terrible (score = 0) 0.5% = bad (score = 25) — roughly aligns with our dataset's mean 2% = average (score = 50) — below national average but high for our data 5% = good (score = 75) — national average 10% = ideal (score = 100) — rare but achievable in well-served urban areas
 
 ```{r results='asis'}
 
@@ -765,26 +773,15 @@ According to U.S. Census Bureau data, approximately 8.5% of households in the U.
 
 There is substantial variation across regions and cities:
 
-In dense urban areas like New York City, up to 55% of households do not have a vehicle.
-In contrast, rural and suburban regions may have 1–2% or fewer zero-vehicle households.
-The national median across tracts is much lower than 8.5% due to the geographic spread of car-dependent areas.
-Deciding weather higher or lower values are favourable for this variable is dificult. High percentage of households without cars may reflect either poverty or strong public transit infrastructure. Because we're scoring this in the context of reliable transportation access, lets say that higher percentages without a vehicle is less desirable especially for areas with poor transit options.
+In dense urban areas like New York City, up to 55% of households do not have a vehicle. In contrast, rural and suburban regions may have 1–2% or fewer zero-vehicle households. The national median across tracts is much lower than 8.5% due to the geographic spread of car-dependent areas. Deciding weather higher or lower values are favourable for this variable is dificult. High percentage of households without cars may reflect either poverty or strong public transit infrastructure. Because we're scoring this in the context of reliable transportation access, lets say that higher percentages without a vehicle is less desirable especially for areas with poor transit options.
 
 ### 0–100 Scale Transformation
+
 In this context, higher NVC values are considered worse, so the scoring scale is inverted: lower values are better.
 
-In our dataset:
-Mean = 4.78%
-Median = 3.20%
-Max = 27.04%
-Based on both this and national ranges, we define:
+In our dataset: Mean = 4.78% Median = 3.20% Max = 27.04% Based on both this and national ranges, we define:
 
-30%+ = terrible (score = 0) — very high percentage with no vehicle
-15% = bad (score = 25)
-8.5% = average (score = 50) — matches national average
-4% = good (score = 75) — slightly below our dataset’s mean
-1% or less = ideal (score = 100)
-
+30%+ = terrible (score = 0) — very high percentage with no vehicle 15% = bad (score = 25) 8.5% = average (score = 50) — matches national average 4% = good (score = 75) — slightly below our dataset’s mean 1% or less = ideal (score = 100)
 
 ```{r results='asis'}
 # Score for NVC: % of households without a vehicle (lower is better)
@@ -801,7 +798,6 @@ score4 <- RelTransport %>% select(nvcScore)
 stargazer(score4, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
-
 ## TRV
 
 -   `TRV` This is the mean travel time to work.
@@ -809,24 +805,20 @@ stargazer(score4, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "me
 This variable should be easier to interpret, as shorter travel times to work are considered favorable in most circumstances.
 
 ### National Rates for Commute Time
+
 According to the U.S. Census Bureau’s 2021 ACS 1-Year Estimates, the national average commute time in the United States was approximately 26.4 minutes. Commute times vary by geography:
 
-In large metro areas (e.g., New York, Washington D.C., Los Angeles), commute times often exceed 35 minutes.
-In smaller cities and rural areas, commutes can be as short as 10–15 minutes.
-
+In large metro areas (e.g., New York, Washington D.C., Los Angeles), commute times often exceed 35 minutes. In smaller cities and rural areas, commutes can be as short as 10–15 minutes.
 
 ### 0–100 Scale Transformation
+
 Because shorter commutes are preferred, the scoring system is inversely scaled—lower values receive higher scores.
 
-Our dataset ranges from 11.8 to 31.7 minutes, with a mean of ~19.9 and a median of ~19.1, which is well below the national average. This suggests our study area experiences relatively short commute times overall.
+Our dataset ranges from 11.8 to 31.7 minutes, with a mean of \~19.9 and a median of \~19.1, which is well below the national average. This suggests our study area experiences relatively short commute times overall.
 
 We selected the following thresholds for scoring:
 
-35 minutes or more = terrible (score = 0)
-30 minutes = bad (score = 25)
-26.4 minutes = average (score = 50) — matches national average
-20 minutes = good (score = 75) — slightly above our local median
-15 minutes or less = ideal (score = 100)
+35 minutes or more = terrible (score = 0) 30 minutes = bad (score = 25) 26.4 minutes = average (score = 50) — matches national average 20 minutes = good (score = 75) — slightly above our local median 15 minutes or less = ideal (score = 100)
 
 ```{r results='asis'}
 
@@ -845,17 +837,17 @@ score5 <- RelTransport %>% select(trvScore)
 stargazer(score5, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
-
 ## EKW
 
 -   `EKW` This is the walkability index, where higher values indicate higher walkability.
 
 ### National rates for Walkability Index
+
 According to the Fox Valley Data Exchange, the EKW variable represents a walkability ranking based on intersection density, proximity to transit, diversity of nearby businesses, and housing density. It is sourced from the Environmental Justice Index, developed by the Agency for Toxic Substances and Disease Registry (ATSDR).
 
 Values range from 1 to 20, with 20 representing the most walkable environments—typically dense, mixed-use urban areas—and 1 representing very car-dependent, low-connectivity zones.
 
-Our dataset ranges from 3.67 to 15.92, with a mean of ~8.57 and a median of ~7.99, suggesting that most census tracts fall in the moderate range of walkability. Tracts near or above 15 are strong outliers and likely represent downtown cores or neighborhoods with compact, transit-rich design.
+Our dataset ranges from 3.67 to 15.92, with a mean of \~8.57 and a median of \~7.99, suggesting that most census tracts fall in the moderate range of walkability. Tracts near or above 15 are strong outliers and likely represent downtown cores or neighborhoods with compact, transit-rich design.
 
 ### 0–100 Scale Transformation
 
@@ -863,12 +855,7 @@ Since higher walkability is a favorable outcome, the scoring increases with EKW.
 
 Based on both the dataset and the 1–20 scale from ATSDR, the following breakpoints were chosen:
 
-3 or below = terrible (score = 0) — very limited walkability
-6 = bad (score = 25) — below dataset median
-9 = average (score = 50) — near dataset mean
-13 = good (score = 75)
-16 or above = ideal (score = 100) — strong walkable tracts, close to scale maximum
-
+3 or below = terrible (score = 0) — very limited walkability 6 = bad (score = 25) — below dataset median 9 = average (score = 50) — near dataset mean 13 = good (score = 75) 16 or above = ideal (score = 100) — strong walkable tracts, close to scale maximum
 
 ```{r results='asis'}
 # Score for EKW: Walkability index (higher is better)
@@ -885,10 +872,10 @@ score6 <- RelTransport %>% select(ekwScore)
 stargazer(score6, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
 ```
 
-
 # Map
 
 This map uses the entire scale 0-100 despite values in our dataset not reaching both ends of the spectrum. Although the color palette will be less extreme, this is beneficial so that we can compare the tri county to national benchmarks and understand where we stand relative to other areas in the United States.
+
 ```{r, fig.width=10, fig.height=10, fig.cap="Map of Reliable Transportation index by census tract"}
 library(tigris)
 library(sf)
@@ -946,16 +933,13 @@ ggplot() +
   coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
  
 ```
+
 # Map & Index Observations:
-The map shows a clear urban/rural divide in transportation accessibility. Census tracts in central urban areas, especially those near downtown Appleton and Oshkosh score much higher on the index, which suggests better walkability, transit access, and lower car dependency.
-On the other hand, rural tracts show consistently low index scores. This is what we would expect, but raises questions about whether the current index over penalizes low density areas where walking or public transit may not be practical options.
-The subjectivity of score thresholds (deciding what is “good” or “average”) in our new scoring process may influence final rankings and this might be something to look at further.
-The equal weighting of all components assumes each variable contributes equally to transportation reliability. This might be something to look into more closely as some factors for example car dependency might dominate a tract’s score.
 
-
+The map shows a clear urban/rural divide in transportation accessibility. Census tracts in central urban areas, especially those near downtown Appleton and Oshkosh score much higher on the index, which suggests better walkability, transit access, and lower car dependency. On the other hand, rural tracts show consistently low index scores. This is what we would expect, but raises questions about whether the current index over penalizes low density areas where walking or public transit may not be practical options. The subjectivity of score thresholds (deciding what is “good” or “average”) in our new scoring process may influence final rankings and this might be something to look at further. The equal weighting of all components assumes each variable contributes equally to transportation reliability. This might be something to look into more closely as some factors for example car dependency might dominate a tract’s score.
 
 ## Potential Concerns & Further Exploration:
-Some areas may score lower not because they lack access, but because certain types of infrastructure—like public transit—aren’t as relevant in those areas. For example, rural farmland would not need to have the same infrastructure as an urban area to  to be considered accessible.
 
+Some areas may score lower not because they lack access, but because certain types of infrastructure—like public transit—aren’t as relevant in those areas. For example, rural farmland would not need to have the same infrastructure as an urban area to to be considered accessible.
 
 # Conclusive Thoughts/Further Questions
