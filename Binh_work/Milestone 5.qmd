@@ -1,5 +1,218 @@
 ---
 title: "Milestone 5"
-format: html
+format: pdf
+author: binh
 ---
+
+```{r setup, include=F}
+# Add packages you want here bru
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(tidycensus) # getting census tract data
+library(stargazer) # better than kable dont @ me
+library(corrplot) # corrplot
+library(RColorBrewer) # For our custom palettes
+library(patchwork) # putting plots together
+library(tigris) #spatial data
+library(sf)    # more spatial data stuff
+library(factoextra) # no clue
+library(kableExtra) # more kable options
+```
+
+I think there are 3 things we might need to handle with this report:
+
+-   Adding one or 2 variables
+
+-   Changing the weight system, again
+
+-   Thinking about the custom palette (this could be found in the mapping census tracts thing)
+
+# Variables?
+
+```{r}
+# Read csv file
+hh <- read.csv("hh tracts 2.csv")
+hh <- hh %>% select(-Layer)
+
+# Copying Mina's code for the string pruning process
+names(hh) <- sub("_.*$", "", names(hh))
+
+# Creating other dataframes that fit the requirements
+hhCorr <- hh %>% select(-HCP) %>% na.omit()
+hhSumm <- hh %>% select(-GEOID)
+
+# Creating another column calculating the ratio:
+hh <- hh %>% mutate(icPct = MHC/(INC/12)*100, icScore = approx(x=c(15,23,30,40,50), y=c(100,75,50,25,0), xout=icPct, rule=2)$y)
+
+# home ownership
+hh <- hh %>% mutate(hoScore = case_when(
+      HUO < 20 ~ NA_real_,
+      TRUE ~ approx(
+        x    = c(20, 40, 60, 80, 90),
+        y    = c(0, 25, 50, 75, 100),
+        xout = HUO,
+        rule = 2
+      )$y))
+
+# travel time
+hh <- hh %>% mutate(trScore = approx(
+        x    = c(16, 20, 25, 35, 60),
+        y    = c(100,  75, 50, 25,0),
+        xout = TRV,
+        rule = 2
+      )$y)
+
+# diversity
+hh <- hh %>%
+  mutate(diScore = approx(
+    x    = c(0.15, 0.25, 0.50, 0.65, 0.75),
+    y    = c(0,    25,   50,   75,  100),
+    xout = REX,
+    rule = 2
+  )$y)
+```
+
+There are a few things that come to mind for an analogue to neighborhood safety and stability. Food insecurity is one, and another is the percentage of people living in the same house 1 year ago (can be taken from `tidycensus`). I will wrangle them here and incorporate that into our finalized index:
+
+## Food Insecurity:
+
+```{r}
+# food insecurity
+hh <- hh %>% 
+  mutate(fiScore =approx(
+    x    = c(6, 9, 12, 24, 36),
+    y    = c(100, 75, 50, 25, 0),
+    xout = FAI,
+    rule = 2
+  )$y)
+```
+
+For this variable I had to use my judgement to fill in the gaps: Feeding America's website only allows you to look at county averages, not at the census tract level. National averages is placed at 11.5%, and the worst county average is about 27%. However, county averages would normally smooth out very bad outliers, implying that we could see more drastic numbers on this level. Currently, my scale for ideal/good/average/bad/terrible is 6/9/12/24/36.
+
+## Census variable: % staying in the same house
+
+In order to find another variable that might measure neighborhood stability, I've chosen to calculate the percent of people who are living in the same house as they were 1 year ago. Since this variable is not available on the data exchange, I've elected to take 2 variables from the ACS through `tidycensus`. Some preliminary examination reveals that the median and mean of this variable is at 88% across US counties. Since one would expect to see more variability at the tract level, the cutoffs for our 5 levels are loosened in comparison with county level quartile estimates. 
+
+```{r}
+# ACS data: percent living in same house 1 year ago (B07003_001E = total, B07003_017E = same house)
+stabilityRaw <- get_acs(
+  geography = "tract",
+  variables = c(total = "B07003_001", sameHouse = "B07003_004"),
+  state = "WI",
+  year = 2022,
+  geometry = FALSE
+) %>%
+  select(GEOID, variable, estimate) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(pctSameHouse = 100 * sameHouse / total)
+
+# join to hh
+hh <- hh %>% mutate(GEOID=as.character(GEOID)) %>% 
+  left_join(stabilityRaw %>% select(GEOID, pctSameHouse), by = "GEOID")
+
+# approx
+hh <- hh %>%
+  mutate(
+    stScore = approx(
+      x = c(75, 82, 88, 93, 96),
+      y = c(0, 25, 50, 75, 100),
+      xout = pctSameHouse,
+      rule = 2
+    )$y
+  )
+```
+
+# New weight system
+
+We are doubling down on rent income percentage and treating food insecurity with the same weight as diversity and travel time. The formula now is 2*rent/income + neighborhood churn + home ownership + 0.5(travel+diversity+food insecurity) / 5.5
+
+```{r}
+ind <- hh %>%  select(GEOID, Name, ends_with("Score")) %>% mutate(newIndex = (2*icScore + stScore + hoScore + (0.50 * trScore) + (0.50 * diScore) + (0.5*fiScore)) / 5.5)
+```
+
+# New palette
+
+Per Jason's comments, we are incorporating a new palette that can be more easily intuited going from bad to good. I have 2 suggestions, both using `RColorBrewer`, with one being a lot more colorblind friendly than the other.
+
+## Red-Yellow_green
+```{r, fig.width=10, fig.height=10}
+# Arbitrary limits decided by Mina (so, not arbitrary)
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Getting spatial data from tigris, zcta was found from reading the documentation
+zips <- unique(hh$GEOID)
+spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
+foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
+
+# Getting other zips from tigris so that we know where we are
+background <- spatial %>%
+  mutate(GEOID=as.character(GEOID)) %>%
+  filter(!GEOID %in% zips)
+
+
+# joining the data tables together
+ind_no_geom <- st_drop_geometry(ind)
+ind <- foxZips %>%
+  left_join(ind_no_geom, by = "GEOID")
+
+# Drawing up the map
+ggplot() +
+  geom_sf(data = ind, aes(fill = newIndex), color = "black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  # Replace the viridis scale with the RColorBrewer one
+  scale_fill_distiller(palette = "RdYlGn", direction = 1) +
+  labs(
+    title = "Map of Census Tracts by New Housing Index",
+    fill = "Index Score"
+  ) +
+  theme_void() +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+## Brown - Blue-Green
+```{r, fig.height=10, fig.width=10}
+ggplot() +
+  geom_sf(data = ind, aes(fill = newIndex), color = "black") +
+  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+  # Replace the viridis scale with the RColorBrewer one
+  scale_fill_distiller(palette = "BrBG", direction = 1) +
+  labs(
+    title = "Map of Census Tracts by New Housing Index",
+    fill = "Index Score"
+  ) +
+  theme_void() +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+```
+
+# Top Tables and Analyses:
+```{r}
+# Drop geometry, rename columns, keep only the scores
+scoreTbl <- ind %>% 
+  st_drop_geometry() %>% 
+  rename(
+    Tract           = Name,
+    CostIncome = icScore,
+    FoodInsecurity   = fiScore,
+    Ownership  = hoScore,
+    Stability = stScore,
+    Commute   = trScore,
+    Diversity  = diScore,
+    Overall    = newIndex
+  ) %>% 
+  select(Tract, CostIncome, Stability, FoodInsecurity, Ownership, Commute, Diversity, Overall)
+
+# Slice out top-10 and bottom-10
+top10    <- scoreTbl %>% arrange(desc(Overall)) %>% slice_head(n = 10)
+bottom10 <- scoreTbl %>% arrange(Overall)        %>% slice_head(n = 10)
+
+# Render with kable, putting most args on one line
+knitr::kable(top10,    caption = "Top 10 Tracts",    digits = 1, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE)
+
+
+knitr::kable(bottom10, caption = "Bottom 10 Tracts", digits = 1, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE)
+```
+```
 
