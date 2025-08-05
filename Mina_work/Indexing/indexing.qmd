@@ -4,9 +4,20 @@ author: cheese
 format: pdf
 ---
 
-# Lifelong Learning
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, message=FALSE, warning=FALSE)
+options(scipen = 5)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
 
-We look into lifelong learning for the census tract subdivision.
+Gonna do the indexing scheme from Jason Report 2 for all the subdivisions here. We gonna skip straight to the indexing 
 
 ```{r}
 #file orwhatever
@@ -24,8 +35,8 @@ ballsAnal <- balls |> select(-GEOID, -Name)
 ```
 
 ## Legend
-
-Similar to the zip code level, the census tract variable names do not provide much insight into what they are representing. Thus, I will describe them here. Please note that all of this data was collected from 2019-2023.
+ 
+THe variable names do not provide much insight into what they are representing. Thus, I will describe them here. Please note that all of this data was collected from 2019-2023.
 
 -   `EDA`: 9th grade education rate (% of residents)
 -   `EDB`: High school graduation rate (% of residents)
@@ -142,3 +153,36 @@ cond_map <- ggplot() +
 
 cond_map
 ```
+
+## Indexing - Cities and Towns
+
+
+
+
+
+## Indexing - Zip Codes
+
+
+
+
+
+## Indexing - Counties
+
+
+
+
+
+## Indexing - Regions
+
+
+
+
+
+
+
+
+
+
+
+
+
