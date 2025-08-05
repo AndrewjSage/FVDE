@@ -1,5 +1,5 @@
 ---
-title: "all the stuff idk"
+title: "All the Indexing on all the different levels"
 author: cheese
 format: pdf
 ---
@@ -34,17 +34,21 @@ names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupi
 ballsAnal <- balls |> select(-GEOID, -Name)
 ```
 
-## Legend
+# Legend
  
-THe variable names do not provide much insight into what they are representing. Thus, I will describe them here. Please note that all of this data was collected from 2019-2023.
+THe variable names do not provide much insight into what they are representing. Thus, I will describe them here. Note that not all the variables appear in all the datasets.
 
+-   `CHF`: School funding adequacy (dollars) 
+-   `CHS`: School segregation index
 -   `EDA`: 9th grade education rate (% of residents)
 -   `EDB`: High school graduation rate (% of residents)
 -   `EDC`: Any higher education rate (% of residents)
 -   `EDE`: College graduation rate (% of residents)
 -   `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
+-   `WVAR`: Public school suspensions (count)
+-   `YLCV`: Public school enrollment (count)
 
-## Indexing - Census Tracts
+# Indexing - Census Tracts
 
 We can try to do an indexing using an arbitrarily decided scale, so we can get indexes from 1-100...
 
@@ -154,27 +158,82 @@ cond_map <- ggplot() +
 cond_map
 ```
 
-## Indexing - Cities and Towns
+# Indexing - Cities and Towns
+
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Cities-and-Towns.csv",nrows=0))
+
+# data wrangling blah blah blah
+CnT <- read.csv("Lifelong-Learning-Cities-and-Towns.csv", skip=2, header=FALSE)
+names(CnT) <- colnames
+CnT <- CnT |> select(-Layer) # removing redundant columns
+names(CnT)[4:10] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+CnTAnal <- CnT |> select(-GEOID, -Name)
+```
 
 
 
+# Indexing - Zip Codes
+
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Zip-Codes.csv",nrows=0))
+
+# data wrangling blah blah blah
+zc <- read.csv("Lifelong-Learning-Zip-Codes.csv", skip=2, header=FALSE)
+names(zc) <- colnames
+zc <- zc |> select(-Layer) # removing redundant columns
+names(zc)[6:12] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+zcAnal <- zc |> select(-GEOID, -Name)
+```
 
 
-## Indexing - Zip Codes
+
+# Indexing - Counties
+
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Counties.csv",nrows=0))
+
+# data wrangling blah blah blah
+cntz <- read.csv("Lifelong-Learning-Counties.csv", skip=2, header=FALSE)
+names(cntz) <- colnames
+cntz <- cntz |> select(-Layer) # removing redundant columns
+names(cntz)[4:12] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+cntzAnal <- cntz |> select(-GEOID, -Name)
+```
 
 
 
+# Indexing - Regions
 
+CHF - School funding adequacy (dollars)
+CHS - School segregation index
 
-## Indexing - Counties
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Regions.csv",nrows=0))
 
+# data wrangling blah blah blah
+rgns <- read.csv("Lifelong-Learning-Regions.csv", skip=2, header=FALSE)
+names(rgns) <- colnames
+rgns <- rgns |> select(-Layer) # removing redundant columns
+names(rgns)[4:12] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
 
-
-
-
-## Indexing - Regions
-
-
+# data for the prelim analysis
+rgnsAnal <- rgns |> select(-GEOID, -Name)
+```
 
 
 
