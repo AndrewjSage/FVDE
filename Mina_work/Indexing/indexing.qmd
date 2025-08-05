@@ -48,17 +48,19 @@ THe variable names do not provide much insight into what they are representing. 
 -   `WVAR`: Public school suspensions (count)
 -   `YLCV`: Public school enrollment (count)
 
-# Indexing - Census Tracts
+Because `WVAR` public school suspensions and `YLCV` public school enrollment are in counts, I decided to omit them since areas with larger populations will be overly represented/punished, meaning they would add extra convolution to the index. If we can get those numbers in percentages, that would be a different story.
 
-We can try to do an indexing using an arbitrarily decided scale, so we can get indexes from 1-100...
+# Scheme
+
+We use an indexing scheme in order to get our indexes between 0-100. The baselines are displayed below.
 
 ```{r}
-condition <- read.csv("Condition-baseline-llct.csv")
+condition <- read.csv("Condition-baseline-llct.csv") # add variables from the other datasets?
 
 kable(condition)
 ```
 
-Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The any higher education rate `EDC` variable is especially guesstimated, as almost all of the information I found online was about high school degree+ or bachelor's degree+.
+Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The average corresponds to the average as reported by the American Community Survey (ACS) in 2023, and the other quintiles are judged based on other stuff I found online. IF someone knows where to find all that location data please just send me the file ok so i can do that Q1 Q3 stuff for a more "statistically accurate" baseline or whatever the fuck.
 
 We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry Lagrange). The graphs below illustrate the idea.
 
@@ -76,6 +78,8 @@ cond_plots <- map(vars_cond, ~{
 
 wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
+
+# Indexing - Census Tracts
 
 ```{r}
 # Code from ChatGPT.. im sorry i cant code... TT
@@ -236,6 +240,12 @@ rgnsAnal <- rgns |> select(-GEOID, -Name)
 ```
 
 
+## qUESTIONS: SHOULD I KILL MYSELF????
+ANSWER: ?
+
+- INCORPORATE OTHER VARIABLES THAT ARE ONLY IN SOME DATASETS INTO INDEX?
+- SOME OF THE VARS ARE SUS LIKE WTF IS SEGRATATION INDEX HELLO??????????????????d
+- idk where to get baselins for allat bigbro
 
 
 
