@@ -1,6 +1,0 @@
-Condition,Cond_Value,EDA,EDB,EDC,EDE,EDG
-Ideal,100,100,100,100,100,100
-Good,75,99,95,75,50,55
-Average,50,96,91,63,38,47
-Poor,25,80,85,55,35,44
-Terrible,0,60,80,40,30,40
