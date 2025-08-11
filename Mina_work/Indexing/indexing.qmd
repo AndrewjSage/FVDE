@@ -142,7 +142,7 @@ colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
 # data wrangling blah blah blah
 balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
 names(balls) <- colnames
-names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
+names(balls)[5:9] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
 ballsAnal <- balls |> select(-GEOID, -Name)
@@ -177,7 +177,7 @@ colnames <- names(read.csv("Lifelong-Learning-Cities-and-Towns.csv",nrows=0))
 # data wrangling blah blah blah
 CnT <- read.csv("Lifelong-Learning-Cities-and-Towns.csv", skip=2, header=FALSE)
 names(CnT) <- colnames
-names(CnT)[4:10] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+names(CnT)[5:11] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
 CnTAnal <- CnT |> select(-GEOID, -Name)
