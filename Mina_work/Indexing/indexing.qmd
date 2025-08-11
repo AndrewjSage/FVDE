@@ -17,38 +17,23 @@ library(factoextra)
 library(kableExtra)
 ```
 
-Gonna do the indexing scheme from Jason Report 2 for all the subdivisions here. We gonna skip straight to the indexing 
-
-```{r}
-#file orwhatever
-# getting the data into readable format
-colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
-
-# data wrangling blah blah blah
-balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
-names(balls) <- colnames
-balls <- balls |> select(-Layer) # removing redundant columns
-names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
-
-# data for the prelim analysis
-ballsAnal <- balls |> select(-GEOID, -Name)
-```
+Gonna do the indexing scheme from Jason Report 2 for all the subdivisions here. We gonna skip straight to the indexing, ignoring preliminary analysis as seen in the previous reports, as well as the maps. The data is all collected from 2019-2023.
 
 # Legend
  
-THe variable names do not provide much insight into what they are representing. Thus, I will describe them here. Note that not all the variables appear in all the datasets.
+The variable names do not provide much insight into what they are representing. Thus, I will describe them here. Note that not all the variables appear in all the datasets.
 
--   `CHF`: School funding adequacy (dollars) 
--   `CHS`: School segregation index
 -   `EDA`: 9th grade education rate (% of residents)
 -   `EDB`: High school graduation rate (% of residents)
 -   `EDC`: Any higher education rate (% of residents)
 -   `EDE`: College graduation rate (% of residents)
 -   `EDG`: Preschool enrollment rate (% of toddlers ages 3-4)
+-   `CHF`: School funding adequacy (dollars) 
+-   `CHS`: School segregation index
 -   `WVAR`: Public school suspensions (count)
 -   `YLCV`: Public school enrollment (count)
 
-Because `WVAR` public school suspensions and `YLCV` public school enrollment are in counts, I decided to omit them since areas with larger populations will be overly represented/punished, meaning they would add extra convolution to the index. If we can get those numbers in percentages, that would be a different story.
+Because `WVAR` public school suspensions and `YLCV` public school enrollment are in counts, I decided to omit them since areas with larger populations will be overly represented/punished, meaning they would add extra convolution to the index. If we can get those numbers in percentages, that would be a different story. Additionally, for the sake of time and simplicity, I will stick to just the `EDX` (first five) variables for this, as they are present in every dataset.
 
 # Scheme
 
@@ -63,6 +48,21 @@ kable(condition)
 Note that the values for the conditions are decided arbitrarily and the values for each of the variables are guesstimated to the best of my ability by cross referencing multiple online sources. The average corresponds to the average as reported by the American Community Survey (ACS) in 2023, and the other quintiles are judged based on other stuff I found online. IF someone knows where to find all that location data please just send me the file ok so i can do that Q1 Q3 stuff for a more "statistically accurate" baseline or whatever the fuck.
 
 We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry Lagrange). The graphs below illustrate the idea.
+
+```{r}
+#file orwhatever for census tracts
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
+
+# data wrangling blah blah blah
+balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
+names(balls) <- colnames
+balls <- balls |> select(-Layer) # removing redundant columns
+names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+ballsAnal <- balls |> select(-GEOID, -Name)
+```
 
 ```{r, fig.height=3, fig.width=15}
 vars_cond <- c("EDA", "EDB", "EDC", "EDE", "EDG")
@@ -79,87 +79,91 @@ cond_plots <- map(vars_cond, ~{
 wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
 
-# Indexing - Census Tracts
-
 ```{r}
-# Code from ChatGPT.. im sorry i cant code... TT
+# Here I write a function to do the indexing for me so I don't have to hard code the data frames every single time
 
-# For each variable, build interpolation function and apply to balls
-for (var in vars_cond) {
+# baseline_df: data frame with baseline explanatory variables and Cond_Value
+# target_df: data frame where you want interpolated values
+# vars_cond: character vector of variable names
+# scores_only: Only includes interpolated scores and not the original values
+# remove_suffix: removes the ending _CondScore
+# add_index: includes the index in final table
+# ind_name: name index column
+
+interpolate_scores <- function(
+    baseline_df, target_df, vars_cond,
+    scores_only = TRUE, remove_suffix = TRUE,
+    add_index = TRUE, ind_name = "Index"
+) {
   
-  # Filter condition data for just this variable (non-NA values only)
-  baseline_x <- condition[[var]]
-  baseline_y <- condition$Cond_Value
-  valid_rows <- !is.na(baseline_x) & !is.na(baseline_y)
+  for (var in vars_cond) {
+    
+    # Baseline values
+    baseline_x <- baseline_df[[var]]
+    baseline_y <- baseline_df$Cond_Value
+    valid_rows <- !is.na(baseline_x) & !is.na(baseline_y)
+    
+    # Interpolation function
+    interp_fun <- approxfun(
+      x = baseline_x[valid_rows], 
+      y = baseline_y[valid_rows], 
+      rule = 2
+    )
+    
+    # New column name
+    new_colname <- paste0(var, "_CondScore")
+    
+    # Apply interpolation
+    target_df[[new_colname]] <- interp_fun(target_df[[var]])
+  }
   
-  # Build interpolation function.. approxfun does piecewise linear interpolating
-  interp_fun <- approxfun(x = baseline_x[valid_rows], 
-                          y = baseline_y[valid_rows], 
-                          rule = 2)  # rule = 2 allows extrapolation using nearest value; we need this because some of the values fall below the terrible part, meaning they have a score of 0 (won't show up as na)
+  # Keep only scores if requested, but preserve name & GEOID
+  if (scores_only) {
+    keep_cols <- c("Name", "GEOID", grep("_CondScore$", names(target_df), value = TRUE))
+    target_df <- target_df %>%
+      select(all_of(keep_cols))
+    
+    # Remove suffix if requested
+    if (remove_suffix) {
+      score_cols <- setdiff(names(target_df), c("Name", "GEOID"))
+      target_df <- target_df %>%
+        rename_with(~ sub("_CondScore$", "", .x), all_of(score_cols))
+    }
+  }
   
-  # Apply interpolation to balls
-  new_colname <- paste0(var, "_CondScore")
-  balls[[new_colname]] <- interp_fun(balls[[var]])
+  # Add average score if requested
+  if (add_index) {
+    score_cols <- setdiff(names(target_df), c("Name", "GEOID"))
+    target_df <- target_df %>%
+      rowwise() %>%
+      mutate(!!ind_name := mean(c_across(all_of(score_cols)), na.rm = TRUE)) %>%
+      ungroup()
+  }
+  
+  return(target_df)
 }
+
 ```
 
-```{r}
-# dataset of just the condition scores + index (averaging everything)
-indexes <- balls |> select("Name", "GEOID", ends_with("_CondScore")) |> 
-  rowwise() |> mutate(Index = mean(c_across(ends_with("_CondScore")), na.rm = TRUE)) |>
-  ungroup() |> arrange(desc(Index))
+# Indexing - Census Tracts
 
-indexes <- indexes |> rename_with(~ gsub("_CondScore.*", "", .x))
+We start with the census tract layer
+
+```{r}
+#test
+balls_index <- interpolate_scores(condition, balls, vars_cond)|> arrange(desc(Index))
 ```
 
 After some coding that you cannot see, we can display the top 10 and bottom 10 indexes computed using this methodology. The following tables show these condition scores of each of the variables as well as the index, which is an average of those scores.
 
 ```{r}
-# Top 10 zscores
-kable(head(indexes, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+# Top 10 indexes
+kable(head(balls_index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
 ```
 
 ```{r}
-# Bottom 10 zscores
-kable(tail(indexes, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
-```
-
-## Visualization
-
-We can visualize these indexes on a map so we have an intuitive way to compare them.
-
-```{r, fig.width=10, fig.height=10, fig.cap="Map of the lifelong learning index (z-score) by census tract"}
-# Making the map for the index computed by averaging the z-scores
-
-condScores <- indexes |> select(GEOID, Index)
-
-# Getting spatial data from tigris, zcta was found from reading the documentation
-zips <- unique(condScores$GEOID)
-spatial <- tracts(state="wi", class="sf", year=2023, progress_bar=F)
-foxZips <- spatial %>% mutate(GEOID=as.character(GEOID)) %>% filter(GEOID %in% zips)
-# Getting other zips from tigris so that we know where we are
-background <- spatial %>%
-  mutate(GEOID=as.character(GEOID)) %>%
-  filter(!GEOID %in% zips)
-
-# joining the data tables together
-condScores <- condScores %>% mutate(GEOID=as.character(GEOID)) %>%  left_join(foxZips, by=c("GEOID"="GEOID"))
-
-condScores <- condScores %>% st_as_sf()
-
-# Arbitrary limits decided by ME!!! (so, not arbitrary)
-zoom_xlim <- c(-89, -88)
-zoom_ylim <- c(43.8, 44.7)
-
-# Drawing up the map
-cond_map <- ggplot() +
-  geom_sf(data = condScores, aes(fill = Index), color="black") +
-  geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
-  scale_fill_viridis_c() + 
-  labs(title = "Lifelong Learning Index (by Census Tract)") +
-  theme_minimal() + coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
-
-cond_map
+# Bottom 10 indexes
+kable(tail(balls_index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
 ```
 
 # Indexing - Cities and Towns
