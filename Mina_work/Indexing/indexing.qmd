@@ -104,13 +104,13 @@ interpolate_scores <- function(
   
   # Keep only scores if requested, but preserve name & GEOID
   if (scores_only) {
-    keep_cols <- c("Name", "GEOID", grep("_CondScore$", names(target_df), value = TRUE))
+    keep_cols <- c( "Layer", "Name", "GEOID", grep("_CondScore$", names(target_df), value = TRUE))
     target_df <- target_df %>%
       select(all_of(keep_cols))
     
     # Remove suffix if requested
     if (remove_suffix) {
-      score_cols <- setdiff(names(target_df), c("Name", "GEOID"))
+      score_cols <- setdiff(names(target_df), c("Layer", "Name", "GEOID"))
       target_df <- target_df %>%
         rename_with(~ sub("_CondScore$", "", .x), all_of(score_cols))
     }
@@ -118,7 +118,7 @@ interpolate_scores <- function(
   
   # Add average score if requested
   if (add_index) {
-    score_cols <- setdiff(names(target_df), c("Name", "GEOID"))
+    score_cols <- setdiff(names(target_df), c("Layer", "Name", "GEOID"))
     target_df <- target_df %>%
       rowwise() %>%
       mutate(!!ind_name := mean(c_across(all_of(score_cols)), na.rm = TRUE)) %>%
@@ -142,7 +142,6 @@ colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
 # data wrangling blah blah blah
 balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
 names(balls) <- colnames
-balls <- balls |> select(-Layer) # removing redundant columns
 names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
@@ -178,7 +177,6 @@ colnames <- names(read.csv("Lifelong-Learning-Cities-and-Towns.csv",nrows=0))
 # data wrangling blah blah blah
 CnT <- read.csv("Lifelong-Learning-Cities-and-Towns.csv", skip=2, header=FALSE)
 names(CnT) <- colnames
-CnT <- CnT |> select(-Layer) # removing redundant columns
 names(CnT)[4:10] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
@@ -192,12 +190,12 @@ CnT_index <- interpolate_scores(condition, CnT, vars_cond)|> arrange(desc(Index)
 
 ```{r}
 # Top 10 indexes
-kable(head(CnT_index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+kable(head(CnT_index, 10), caption = "Top 10 indexes (by City or Town)", digits=3)
 ```
 
 ```{r}
 # Bottom 10 indexes
-kable(tail(CnT_index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+kable(tail(CnT_index, 10), caption = "Bottom 10 indexes (by City or Town)", digits=3)
 ```
 
 # Indexing - Zip Codes
@@ -212,8 +210,7 @@ colnames <- names(read.csv("Lifelong-Learning-Zip-Codes.csv",nrows=0))
 # data wrangling blah blah blah
 zc <- read.csv("Lifelong-Learning-Zip-Codes.csv", skip=2, header=FALSE)
 names(zc) <- colnames
-zc <- zc |> select(-Layer) # removing redundant columns
-names(zc)[6:12] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+names(zc)[7:13] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
 zcAnal <- zc |> select(-GEOID, -Name)
@@ -226,12 +223,12 @@ zc_index <- interpolate_scores(condition, zc, vars_cond)|> arrange(desc(Index))
 
 ```{r}
 # Top 10 indexes
-kable(head(zc_index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+kable(head(zc_index, 10), caption = "Top 10 indexes (by Zip Code)", digits=3)
 ```
 
 ```{r}
 # Bottom 10 indexes
-kable(tail(zc_index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+kable(tail(zc_index, 10), caption = "Bottom 10 indexes (by Zip Code)", digits=3)
 ```
 
 # Indexing - Counties
@@ -246,8 +243,7 @@ colnames <- names(read.csv("Lifelong-Learning-Counties.csv",nrows=0))
 # data wrangling blah blah blah
 cntz <- read.csv("Lifelong-Learning-Counties.csv", skip=2, header=FALSE)
 names(cntz) <- colnames
-cntz <- cntz |> select(-Layer) # removing redundant columns
-names(cntz)[4:12] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+names(cntz)[5:13] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
 cntzAnal <- cntz |> select(-GEOID, -Name)
@@ -255,7 +251,8 @@ cntzAnal <- cntz |> select(-GEOID, -Name)
 
 ```{r}
 # Get index using function we wrote above
-interpolate_scores(condition, cntz, vars_cond)|> arrange(desc(Index)) |> kable()
+cntz_index <- interpolate_scores(condition, cntz, vars_cond)|> arrange(desc(Index))
+cntz_index |> kable(caption = "Indexes (by County)")
 ```
 
 # Indexing - Regions
@@ -270,8 +267,7 @@ colnames <- names(read.csv("Lifelong-Learning-Regions.csv",nrows=0))
 # data wrangling blah blah blah
 rgns <- read.csv("Lifelong-Learning-Regions.csv", skip=2, header=FALSE)
 names(rgns) <- colnames
-rgns <- rgns |> select(-Layer) # removing redundant columns
-names(rgns)[4:12] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
+names(rgns)[5:13] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get rid of the stupid date things since they're all the same (see below)
 
 # data for the prelim analysis
 rgnsAnal <- rgns |> select(-GEOID, -Name)
@@ -279,9 +275,23 @@ rgnsAnal <- rgns |> select(-GEOID, -Name)
 
 ```{r}
 # Get index using function we wrote above
-interpolate_scores(condition, rgns, vars_cond)|> arrange(desc(Index)) |> kable()
+rgns_index<- interpolate_scores(condition, rgns, vars_cond)|> arrange(desc(Index))
+rgns_index |> kable(caption = "Indexes (by Region)")
 ```
 
+```{r}
+# change GEOID and stuff to be a chr string so they can be put into bind_rows
+balls_index <- balls_index |> mutate(GEOID = as.character(GEOID))
+CnT_index <- CnT_index |> mutate(GEOID = as.character(GEOID))
+cntz_index <- cntz_index |> mutate(GEOID = as.character(GEOID))
+zc_index <- zc_index |> mutate(GEOID = as.character(GEOID)) |> mutate(Name = as.character(Name))
+```
+
+```{r}
+# bind all the indexes together and export as csv
+index_final <- bind_rows(balls_index, CnT_index, cntz_index, zc_index, rgns_index)
+write.csv(index_final, file = "D:/RStudio/Projects/FVDE/Mina_work/Indexing/lifelong_learning_indexes.csv", row.names = FALSE)
+```
 
 ## qUESTIONS: SHOULD I KILL MYSELF????
 ANSWER: ?
