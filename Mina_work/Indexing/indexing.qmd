@@ -49,21 +49,6 @@ Note that the values for the conditions are decided arbitrarily and the values f
 
 We can then use these baseline values to create a function that maps the values we have for each variable to their condition score. For simplicity's sake, I'm gonna go with a polygonal approximation (sorry Lagrange). The graphs below illustrate the idea.
 
-```{r}
-#file orwhatever for census tracts
-# getting the data into readable format
-colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
-
-# data wrangling blah blah blah
-balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
-names(balls) <- colnames
-balls <- balls |> select(-Layer) # removing redundant columns
-names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
-
-# data for the prelim analysis
-ballsAnal <- balls |> select(-GEOID, -Name)
-```
-
 ```{r, fig.height=3, fig.width=15}
 vars_cond <- c("EDA", "EDB", "EDC", "EDE", "EDG")
 
@@ -80,7 +65,7 @@ wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
 
 ```{r}
-# Here I write a function to do the indexing for me so I don't have to hard code the data frames every single time
+# Here I (ChatGPT) writes a function to do the indexing for me so I don't have to hard code the data frames every single time sorry guys i cant code... TT
 
 # baseline_df: data frame with baseline explanatory variables and Cond_Value
 # target_df: data frame where you want interpolated values
@@ -147,10 +132,25 @@ interpolate_scores <- function(
 
 # Indexing - Census Tracts
 
-We start with the census tract layer
+We start with the census tract layer.
 
 ```{r}
-#test
+#file orwhatever for census tracts
+# getting the data into readable format
+colnames <- names(read.csv("Lifelong-Learning-Cencus-Tracts.csv",nrows=0))
+
+# data wrangling blah blah blah
+balls <- read.csv("Lifelong-Learning-Cencus-Tracts.csv", skip=2, header=FALSE)
+names(balls) <- colnames
+balls <- balls |> select(-Layer) # removing redundant columns
+names(balls)[4:8] <- c("EDA", "EDB", "EDC", "EDE", "EDG") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+ballsAnal <- balls |> select(-GEOID, -Name)
+```
+
+```{r}
+# Get index using function we wrote above
 balls_index <- interpolate_scores(condition, balls, vars_cond)|> arrange(desc(Index))
 ```
 
@@ -168,6 +168,8 @@ kable(tail(balls_index, 10), caption = "Bottom 10 indexes (by Census Tract)", di
 
 # Indexing - Cities and Towns
 
+This layer includes the last two variables detailed in the legend section, which have been excluded due to them being in counts.
+
 ```{r}
 #file orwhatever
 # getting the data into readable format
@@ -183,9 +185,24 @@ names(CnT)[4:10] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get r
 CnTAnal <- CnT |> select(-GEOID, -Name)
 ```
 
+```{r}
+# Get index using function we wrote above
+CnT_index <- interpolate_scores(condition, CnT, vars_cond)|> arrange(desc(Index))
+```
 
+```{r}
+# Top 10 indexes
+kable(head(CnT_index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+```
+
+```{r}
+# Bottom 10 indexes
+kable(tail(CnT_index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+```
 
 # Indexing - Zip Codes
+
+This layer also includes the last two variables detailed in the legend section, which have been excluded due to them being in counts.
 
 ```{r}
 #file orwhatever
@@ -202,9 +219,24 @@ names(zc)[6:12] <- c("EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", "YLCV") # get ri
 zcAnal <- zc |> select(-GEOID, -Name)
 ```
 
+```{r}
+# Get index using function we wrote above
+zc_index <- interpolate_scores(condition, zc, vars_cond)|> arrange(desc(Index))
+```
 
+```{r}
+# Top 10 indexes
+kable(head(zc_index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+```
+
+```{r}
+# Bottom 10 indexes
+kable(tail(zc_index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+```
 
 # Indexing - Counties
+
+This layer includes all the variables detailed in the legend section, but for simplicity's sake I will only be looking at the `EDX` variables as mentioned previously.
 
 ```{r}
 #file orwhatever
@@ -221,12 +253,14 @@ names(cntz)[4:12] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", 
 cntzAnal <- cntz |> select(-GEOID, -Name)
 ```
 
-
+```{r}
+# Get index using function we wrote above
+interpolate_scores(condition, cntz, vars_cond)|> arrange(desc(Index)) |> kable()
+```
 
 # Indexing - Regions
 
-CHF - School funding adequacy (dollars)
-CHS - School segregation index
+This layer also includes all the variables detailed in the legend section, but for simplicity's sake I will only be looking at the `EDX` variables as mentioned previously.
 
 ```{r}
 #file orwhatever
@@ -241,6 +275,11 @@ names(rgns)[4:12] <- c("CHF", "CHS", "EDA", "EDB", "EDC", "EDE", "EDG", "WVAR", 
 
 # data for the prelim analysis
 rgnsAnal <- rgns |> select(-GEOID, -Name)
+```
+
+```{r}
+# Get index using function we wrote above
+interpolate_scores(condition, rgns, vars_cond)|> arrange(desc(Index)) |> kable()
 ```
 
 
