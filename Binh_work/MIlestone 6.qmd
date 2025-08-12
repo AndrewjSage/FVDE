@@ -1,0 +1,131 @@
+---
+title: "Milestone 6"
+format: html
+---
+
+```{r setup, include=F}
+# Add packages you want here bru
+knitr::opts_chunk$set(echo = FALSE, message=FALSE, warning=FALSE, fig.height = 10)
+options(scipen = 7)
+library(tidyverse)
+library(tidycensus) # getting census tract data
+library(stargazer) # better than kable dont @ me
+library(corrplot) # corrplot
+library(RColorBrewer) # For our custom palettes
+library(patchwork) # putting plots together
+library(tigris) #spatial data
+library(sf)    # more spatial data stuff
+library(factoextra) # no clue
+library(kableExtra) # more kable options
+```
+
+For this milestone, we write a new csv file to upload to Mitopia, per the template provided by Susan.
+As Prof. Sage suggested, we will use the most recent data possible if 2023 data is not available for our finalized index.
+For food insecurity, 2023 data is available at the county and region levels, but not at the census tract, zipcode and city levels. We will use 2020 data for said calculations instead.
+```{r}
+# Read csv file
+hh1 <- read.csv("hh tracts 2.csv") %>% select(-Name)
+hh2 <- read.csv("hh zipcodes.csv") %>% select(-Name)
+hh3 <- read.csv("hh cities.csv") %>% select(-Name)
+hh4 <- read.csv("hh counties.csv") %>% select(-Name)
+
+# String pruning command from Mina
+names(hh1) <- sub("_.*$", "", names(hh1))
+names(hh2) <- sub("_.*$", "", names(hh2))
+names(hh3) <- sub("_.*$", "", names(hh3))
+names(hh4) <- sub("_.*$", "", names(hh4))
+
+# Binding the rows together
+hh <- bind_rows(hh1,hh2,hh3,hh4)
+
+# Creating another column calculating the ratio:
+hh <- hh %>% mutate(icPct = MHC/(INC/12)*100, icScore = approx(x=c(15,23,30,40,50), y=c(100,75,50,25,0), xout=icPct, rule=2)$y)
+
+# home ownership score
+hh <- hh %>% mutate(hoScore = case_when(
+      HUO < 20 ~ NA_real_,
+      TRUE ~ approx(
+        x    = c(20, 40, 60, 80, 90),
+        y    = c(0, 25, 50, 75, 100),
+        xout = HUO,
+        rule = 2
+      )$y))
+
+# travel time score
+hh <- hh %>% mutate(trScore = approx(
+        x    = c(16, 20, 25, 35, 60),
+        y    = c(100,  75, 50, 25,0),
+        xout = TRV,
+        rule = 2
+      )$y)
+
+# diversity score
+hh <- hh %>%
+  mutate(diScore = approx(
+    x    = c(0.15, 0.25, 0.50, 0.65, 0.75),
+    y    = c(0,    25,   50,   75,  100),
+    xout = REX,
+    rule = 2
+  )$y)
+
+# food insecurity
+hh <- hh %>% 
+  mutate(fiScore =approx(
+    x    = c(6, 9, 12, 24, 36),
+    y    = c(100, 75, 50, 25, 0),
+    xout = FAI,
+    rule = 2
+  )$y)
+
+```
+
+```{r}
+# stabilityRaw1 <- get_acs(
+#   geography = "tract",
+#   variables = c(total = "B07003_001", sameHouse = "B07003_004"),
+#   state = "WI",
+#   year = 2023,
+#   geometry = FALSE
+# ) %>%
+#   select(GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pctSameHouse = 100 * sameHouse / total)
+# 
+# stabilityRaw2 <- get_acs(
+#   geography = "county",
+#   variables = c(total = "B07003_001", sameHouse = "B07003_004"),
+#   state = "WI",
+#   year = 2023,
+#   geometry = FALSE
+# ) %>%
+#   select(GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pctSameHouse = 100 * sameHouse / total)
+# 
+# stabilityRaw3 <- get_acs(
+#   geography = "county subdivision",
+#   variables = c(total = "B07003_001", sameHouse = "B07003_004"),
+#   state = "WI",
+#   year = 2023,
+#   geometry = FALSE
+# ) %>%
+#   select(GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pctSameHouse = 100 * sameHouse / total)
+# 
+# stabilityRaw4 <- get_acs(
+#   geography = "zip code tabulation area",
+#   variables = c(total = "B07003_001", sameHouse = "B07003_004"),
+#   state = "WI",
+#   year = 2020,
+#   geometry = FALSE
+# ) %>%
+#   select(GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pctSameHouse = 100 * sameHouse / total)
+```
+```{r}
+ind <- hh %>%  select(Layer, GEOID, ends_with("Score")) %>% mutate(newIndex = (2*icScore  + hoScore + (0.50 * trScore) + (0.50 * diScore) + (0.5*fiScore)) / 4.5)
+newcsv <- ind %>% select(Layer, GEOID, newIndex)
+```
+
