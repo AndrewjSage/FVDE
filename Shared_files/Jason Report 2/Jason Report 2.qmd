@@ -1008,6 +1008,38 @@ I set 0-100 limits on the scale for this map despite values in our dataset not r
 
 The map shows a clear urban/rural divide in transportation accessibility. Census tracts in central urban areas, especially those near downtown Appleton and Oshkosh score much higher on the index, which suggests better walkability, transit access, and lower car dependency. On the other hand, rural tracts show consistently low index scores. This is what we would expect, but raises questions about whether the current index over penalizes low density areas where walking or public transit may not be practical options. The subjectivity of score thresholds (deciding what is “good” or “average”) in our new scoring process may influence final rankings and this might be something to look at further. The equal weighting of all components assumes each variable contributes equally to transportation reliability. This might be something to look into more closely as some factors for example car dependency might dominate a tract’s score.
 
+\newpage
+
+```{r}
+# Drop geometry, rename columns, keep only the scores
+scoreTbl2 <- ind %>% 
+  st_drop_geometry() %>% 
+  rename(
+    Tract           = GEOID,
+    WalkBike = actScore,
+    DriveAlone   = carScore,
+    UsePublic  = pubScore,
+    Commute   = trvScore,
+    NoVehicle = nvcScore,
+    Walkability  = ekwScore,
+    Overall    = newIndex
+  ) %>% 
+  select(Tract, WalkBike, DriveAlone, UsePublic,
+         Commute, NoVehicle, Walkability, Overall)
+
+# Slice out top-10 and bottom-10
+top102    <- scoreTbl2 %>% arrange(desc(Overall)) %>% slice_head(n = 10)
+bottom102 <- scoreTbl2 %>% arrange(Overall)        %>% slice_head(n = 10)
+
+# Render with kable, putting most args on one line
+knitr::kable(top102,    caption = "Top 10 Tracts",    digits = 1, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE)
+
+
+knitr::kable(bottom102, caption = "Bottom 10 Tracts", digits = 1, booktabs = TRUE) %>% 
+  kable_styling(full_width = FALSE)
+```
+
 # Potential Concerns & Further Exploration:
 
 Some areas may score lower not because they lack access, but because certain types of infrastructure like public transit aren’t as relevant in those areas. For example, rural farmland would not need to have the same infrastructure as an urban area to to be considered accessible.

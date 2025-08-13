@@ -1,0 +1,79 @@
+---
+title: "Index for Transportation at each level"
+author: Dereje
+format: pdf
+---
+
+I used Minas approach for creating the index at each level
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, message=FALSE, warning=FALSE)
+options(scipen = 5)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+
+```{r}
+# Condition labels and baseline scores
+Condition  <- c("Ideal", "Good", "Average", "Poor", "Terrible")
+Cond_Value <- c(100, 75, 50, 25, 0)
+
+# Breakpoints for each variable
+ACT <- c(17, 7, 3.5, 1.2, 0)       # Walk/Bike to Work
+CAR <- c(50, 65, 76, 82, 90)       # Drive Alone to Work
+PUB <- c(10, 5, 2, 0.5, 0)         # Uses Public Transit
+NVC <- c(0, 4, 8.5, 15, 25)        # Households Without Vehicle
+TRV <- c(15, 20, 26.4, 30, 35)     # Travel Time to Work
+EKW <- c(16, 13, 9, 6, 3)          # Walkability Index
+
+# Combine into a data frame
+TransportBaselines <- data.frame(
+  Condition, Cond_Value,
+  ACT, CAR, PUB, NVC, TRV, EKW
+)
+# Save as CSV
+write.csv(TransportBaselines, "baselines.csv", row.names = FALSE)
+
+kable(TransportBaselines)
+```
+
+
+```{r, fig.height=3, fig.width=15}
+vars_cond <- c("ACT", "CAR", "PUB", "NVC", "TRV")
+
+cond_plots <- map(vars_cond, ~{
+  cdvar <- .x
+  
+  ggplot(data=TransportBaselines, aes_string(x=cdvar, y='Cond_Value')) +
+    geom_line() +
+    geom_point() +
+    labs(title=paste(cdvar, "Score"), x=paste(cdvar, "Value"), y="Condition Score") + scale_x_continuous(limits = c(0,NA))
+})
+
+wrap_plots(cond_plots, ncol=5, nrow=1)
+```
+
+```{r}
+
+```
+
+# Indexing - Census Tracts
+
+# Indexing - Cities and Towns
+
+# Indexing - Zip Codes
+
+# Indexing - Counties
+
+# Indexing - Regions
+
+
+
+
+
