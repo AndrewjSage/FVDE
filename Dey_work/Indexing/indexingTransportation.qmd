@@ -59,20 +59,218 @@ cond_plots <- map(vars_cond, ~{
 wrap_plots(cond_plots, ncol=5, nrow=1)
 ```
 
+
+Using Minas Code here again
 ```{r}
+
+# baseline_df: data frame with baseline explanatory variables and Cond_Value
+# target_df: data frame where you want interpolated values
+# vars_cond: character vector of variable names
+# scores_only: Only includes interpolated scores and not the original values
+# remove_suffix: removes the ending _CondScore
+# add_index: includes the index in final table
+# ind_name: name index column
+
+interpolate_scores <- function(
+    baseline_df, target_df, vars_cond,
+    scores_only = TRUE, remove_suffix = TRUE,
+    add_index = TRUE, ind_name = "Index"
+) {
+  
+  for (var in vars_cond) {
+    
+    # Baseline values
+    baseline_x <- baseline_df[[var]]
+    baseline_y <- baseline_df$Cond_Value
+    valid_rows <- !is.na(baseline_x) & !is.na(baseline_y)
+    
+    # Interpolation function
+    interp_fun <- approxfun(
+      x = baseline_x[valid_rows], 
+      y = baseline_y[valid_rows], 
+      rule = 2
+    )
+    
+    # New column name
+    new_colname <- paste0(var, "_CondScore")
+    
+    # Apply interpolation
+    target_df[[new_colname]] <- interp_fun(target_df[[var]])
+  }
+  
+  # Keep only scores if requested, but preserve name & GEOID
+  if (scores_only) {
+    keep_cols <- c( "Layer", "Name", "GEOID", grep("_CondScore$", names(target_df), value = TRUE))
+    target_df <- target_df %>%
+      select(all_of(keep_cols))
+    
+    # Remove suffix if requested
+    if (remove_suffix) {
+      score_cols <- setdiff(names(target_df), c("Layer", "Name", "GEOID"))
+      target_df <- target_df %>%
+        rename_with(~ sub("_CondScore$", "", .x), all_of(score_cols))
+    }
+  }
+  
+  # Add average score if requested
+  if (add_index) {
+    score_cols <- setdiff(names(target_df), c("Layer", "Name", "GEOID"))
+    target_df <- target_df %>%
+      rowwise() %>%
+      mutate(!!ind_name := mean(c_across(all_of(score_cols)), na.rm = TRUE)) %>%
+      ungroup()
+  }
+  
+  return(target_df)
+}
 
 ```
 
 # Indexing - Census Tracts
 
+We start with the census tract layer.
+
+```{r}
+# Read headers and data
+colenames <- names(read.csv("TransportationCensusTracts.csv", nrows = 0))
+tracts <- read.csv("TransportationCensusTracts.csv", skip = 2, header = FALSE)
+names(tracts) <- colenames
+
+# rename date-stamped columns if needed
+names(tracts)[5:10] <- c("ACT", "CAR", "PUB", "NVC", "TRV", "EKW")
+
+# Get index
+vars_cond <- c("ACT", "CAR", "PUB", "NVC", "TRV", "EKW")
+tracts_index <- interpolate_scores(TransportBaselines, tracts, vars_cond) |>
+  arrange(desc(Index))
+```
+
+```{r}
+# Top 10 indexes
+kable(head(tracts_index, 10), caption = "Top 10 indexes (by Census Tract)", digits=3)
+```
+
+```{r}
+# Bottom 10 indexes
+kable(tail(tracts_index, 10), caption = "Bottom 10 indexes (by Census Tract)", digits=3)
+```
 # Indexing - Cities and Towns
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("TransportationCitiesAndTowns.csv",nrows=0))
+
+# data wrangling blah blah blah
+CNT <- read.csv("TransportationCitiesAndTowns.csv", skip=2, header=FALSE)
+names(CNT) <- colnames
+names(CNT)[5:10] <- c("ACT", "CAR", "PUB", "NVC", "TRV", "EKW") 
+
+# data for the prelim analysis
+CitiesAndTowns <- CNT |> select(-GEOID, -Name)
+```
+
+```{r}
+# Get index using function we wrote above
+CitiesAndTowns_index <- interpolate_scores(TransportBaselines, CNT, vars_cond)|> arrange(desc(Index))
+```
+
+```{r}
+# Top 10 indexes
+kable(head(CitiesAndTowns_index, 10), caption = "Top 10 indexes (by City or Town)", digits=3)
+```
+
+```{r}
+# Bottom 10 indexes
+kable(tail(CitiesAndTowns_index, 10), caption = "Bottom 10 indexes (by City or Town)", digits=3)
+```
 
 # Indexing - Zip Codes
 
+```{r}
+# getting the data into readable format
+colnames <- names(read.csv("TransportationZIPCodes.csv",nrows=0))
+
+# data wrangling 
+zc <- read.csv("TransportationZIPCodes.csv", skip=2, header=FALSE)
+names(zc) <- colnames
+names(zc)[5:10] <- c("ACT", "CAR", "PUB", "NVC", "TRV", "EKW") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+ZIPCodes <- zc |> select(-GEOID, -Name)
+```
+
+```{r}
+# Get index using function we wrote above
+ZIPCodes_index <- interpolate_scores(TransportBaselines, zc, vars_cond)|> arrange(desc(Index))
+```
+
+```{r}
+# Top 10 indexes
+kable(head(ZIPCodes_index, 10), caption = "Top 10 indexes (by Zip Code)", digits=3)
+```
+
+```{r}
+# Bottom 10 indexes
+kable(tail(ZIPCodes_index, 10), caption = "Bottom 10 indexes (by Zip Code)", digits=3)
+```
+
 # Indexing - Counties
+
+```{r}
+#file orwhatever
+# getting the data into readable format
+colnames <- names(read.csv("TransportationCounties.csv",nrows=0))
+
+# data wrangling blah blah blah
+cntz <- read.csv("TransportationCounties.csv", skip=2, header=FALSE)
+names(cntz) <- colnames
+names(cntz)[5:10] <- c("ACT", "CAR", "PUB", "NVC", "TRV", "EKW") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+Counties <- cntz |> select(-GEOID, -Name)
+```
+
+```{r}
+# Get index using function we wrote above
+Counties_index <- interpolate_scores(TransportBaselines, cntz, vars_cond)|> arrange(desc(Index))
+Counties_index |> kable(caption = "Indexes (by County)")
+```
+
 
 # Indexing - Regions
 
+```{r}
+# getting the data into readable format
+colnames <- names(read.csv("TransportationRegions.csv",nrows=0))
+
+# data wrangling blah blah blah
+rgns <- read.csv("TransportationRegions.csv", skip=2, header=FALSE)
+names(rgns) <- colnames
+names(rgns)[5:10] <- c("ACT", "CAR", "PUB", "NVC", "TRV", "EKW") # get rid of the stupid date things since they're all the same (see below)
+
+# data for the prelim analysis
+Regions <- rgns |> select(-GEOID, -Name)
+```
+
+```{r}
+# Get index using function we wrote above
+Regions_index<- interpolate_scores(TransportBaselines, rgns, vars_cond)|> arrange(desc(Index))
+Regions_index |> kable(caption = "Indexes (by Region)")
+```
+
+```{r}
+# change GEOID and stuff to be a chr string so they can be put into bind_rows
+tracts_index <- tracts_index |> mutate(GEOID = as.character(GEOID))
+CitiesAndTowns_index <- CitiesAndTowns_index |> mutate(GEOID = as.character(GEOID))
+Counties_index <- Counties_index |> mutate(GEOID = as.character(GEOID))
+ZIPCodes_index <- ZIPCodes_index |> mutate(GEOID = as.character(GEOID)) |> mutate(Name = as.character(Name))
+```
+
+```{r}
+# bind all the indexes together and export as csv
+index_final <- bind_rows(tracts_index, CitiesAndTowns_index, Counties_index, ZIPCodes_index, Regions_index)
+write.csv(index_final, file = "/Users/derejepollock/R Studio Projects/FVDE/Dey_work/Indexing/Reliable_Transportation_indexes.csv", row.names = FALSE)
+```
 
 
 
