@@ -273,5 +273,30 @@ write.csv(index_final, file = "/Users/derejepollock/R Studio Projects/FVDE/Dey_w
 ```
 
 
+```{r}
+
+ReliableTransportationIndexes <- index_final 
+# add 2 more columns with topic and period 
+ReliableTransportationIndexes <- ReliableTransportationIndexes %>%
+  mutate(topic = "FVDESVYF", stratification = "", period = "2022-2023")
+
+ReliableTransportationIndexes <- ReliableTransportationIndexes %>% select(-ACT, -Name, -CAR, -PUB, -NVC, -TRV, -EKW)
+
+#change names of some columns 
+ReliableTransportationIndexes <- ReliableTransportationIndexes %>%
+  rename(value = Index, geoid = GEOID, layer = Layer)
+
+# change order if columns 
+ReliableTransportationIndexes <- ReliableTransportationIndexes %>%
+  select(layer, geoid, topic, stratification, period, value)
+
+# write to a csv file to be sent to susan
+write.csv(ReliableTransportationIndexes, file = "/Users/derejepollock/R Studio Projects/FVDE/Dey_work/Indexing/reliable_transportation_indexes_formated.csv", row.names = FALSE)
+```
+
+
+
+
+
 
 
