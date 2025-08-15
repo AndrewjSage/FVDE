@@ -1,0 +1,407 @@
+---
+title: "Reliable Transportation Index Calculation"
+author: Dereje Pollock
+format: pdf
+---
+
+```{r setup, include=F}
+knitr::opts_chunk$set(echo = F, message=FALSE, warning=FALSE)
+options(scipen = 5)
+library(tidyverse)
+library(stargazer)
+library(corrplot)
+library(patchwork)
+library(tigris)
+library(sf)
+library(factoextra)
+library(kableExtra)
+```
+
+# Overview:
+
+-   We replaced the old z-score paradigm with a new 0-100 scoring system that accounted for national averages and trends.
+
+-   We analyzed some of the observed changes and differences when applying our new index scoring paradigm.
+
+
+Here is the list of Variables that we will be working with and their definitions.
+
+-   `ACT` This is the percentage of workers who walk or bike to work
+-   `CAR` This is the percentage of workers who drive alone to work
+-   `PUB` This is the percentage of workers using public transit
+-   `NVC` This is the percentage of households without a vehicle
+-   `TRV` This is the mean travel time to work.
+-   `EKW` This is the walkability index, where higher values indicate higher walkability.
+
+
+## Scoring Approach
+
+Each variable is converted to a Condition Score between 0 and 100 using five breakpoints:
+0 (terrible), 25 (bad), 50 (average), 75 (good), 100 (ideal).
+
+The breakpoints are based on:
+
+- National data (e.g., American Community Survey benchmarks)
+
+- Local dataset distributions
+
+- Our judgment about what values indicate more reliable, safe, and accessible transportation
+
+
+
+
+```{r}
+library(knitr)
+library(kableExtra)
+
+# Create the breakpoints table
+breakpoints_tbl <- data.frame(
+  Variable = c(
+    "ACT (Walk/Bike) %",
+    "CAR (Drive Alone) %",
+    "PUB (Public Transit) %",
+    "NVC (No Vehicle) %",
+    "TRV (Commute Time, min)",
+    "EKW (Walkability)"
+  ),
+  `Terrible (0)` = c("0%", "90%", "0%", "25%", "35", "3"),
+  `Bad (25)`     = c("1.2%", "82%", "0.5%", "15%", "30", "6"),
+  `Average (50)` = c("3.5%", "76%", "2%", "8.5%", "26.4", "9"),
+  `Good (75)`    = c("7%", "65%", "5%", "4%", "20", "13"),
+  `Ideal (100)`  = c("17%", "50%", "10%", "0%", "15", "16"),
+  Direction      = c(
+    "Higher is better",
+    "Lower is better",
+    "Higher is better",
+    "Lower is better",
+    "Lower is better",
+    "Higher is better"
+  ),
+  check.names = FALSE
+)
+
+# Render as a formatted table
+kable(breakpoints_tbl, format = "latex", booktabs = TRUE,
+      caption = "Breakpoints for Reliable Transportation Index Variables") %>%
+  kable_styling(latex_options = c("hold_position", "scale_down"))
+```
+This table is a simplified view, the actual calculation process also involves `interpolation` between breakpoints, clamping out of range values, and mapping all six variables to national benchmarks before averaging them for the overall index
+I didn’t include all of those technical steps here to avoid a long winded explanation, but I’m happy to walk through the full process if that would be useful.
+
+Looking ahead, I think there’s a lot of potential to align the index more closely with the broader range of trip purposes and transportation modes in the pyramid Sarah Shared, while still grounding it in data that we can track consistently over time.
+
+
+Here is a visualization of how each variable is scored
+```{r, fig.height=3, fig.width=15}
+
+TransportBaselines <- read.csv("baselines.csv")
+vars_cond <- c("ACT", "CAR", "PUB", "NVC", "TRV")
+
+cond_plots <- map(vars_cond, ~{
+  cdvar <- .x
+  
+  ggplot(data=TransportBaselines, aes_string(x=cdvar, y='Cond_Value')) +
+    geom_line() +
+    geom_point() +
+    labs(title=paste(cdvar, "Score"), x=paste(cdvar, "Value"), y="Condition Score") + scale_x_continuous(limits = c(0,NA))
+})
+
+wrap_plots(cond_plots, ncol=5, nrow=1)
+```
+### Overall Index Calculation
+
+We score each variable using its breakpoints.
+Example for `ACT`:
+
+A tract with 5% walking/biking would score between 50 (average) and 75 (good), closer to 75.
+
+We would then take the average of the six variable scores for that tract.
+
+The final index is has a scale of 0–100, where higher scores indicate more favorable transportation conditions.
+
+Since we are using equal weights for each variable as of now, here would be the formula for each census tract (let me know if you think some variables should be weighted more heavily in the calculation)
+
+#### Formula
+
+`Overall Index = mean(ACT_score, CAR_score, PUB_score, NVC_score, TRV_score, EKW_score)`
+
+
+```{r}
+# Function to take the column names
+colnames <- names(read.csv("TransportationCensusTracts2.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport <- read.csv("TransportationCensusTracts2.csv", skip = 5, header = F)
+names(RelTransport) <- colnames
+RelTransport <- RelTransport %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(RelTransport) <- sub("_.*$", "", names(RelTransport))
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% na.omit() 
+RelTransportSumm <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
+```{r}
+# Function to take the column names
+colnames2 <- names(read.csv("TransportationCensusTracts2.csv", nrows = 0))
+
+# Read the data, skipping the first two rows, then re-assign names
+RelTransport <- read.csv("TransportationCensusTracts2.csv", skip = 5, header = F)
+names(RelTransport) <- colnames2
+RelTransport <- RelTransport %>% select(-Layer, -Name)
+
+# Copying Mina's code for the string pruning process
+names(RelTransport) <- sub("_.*$", "", names(RelTransport))
+
+# Creating other dataframes that fit the requirements
+RelTransportCorr2 <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) %>% na.omit() 
+RelTransportSumm2 <- RelTransport %>% select(-GEOID, -Longitude, -Latitude) 
+```
+
+```{r results='asis'}
+# Score for ACT: % of workers who walk or bike to work
+RelTransport <- RelTransport %>%
+  mutate(actScore = approx(
+    x = c(0, 1.2, 3.5, 7, 17),         # subjective cutoffs based on spread
+    y = c(0, 25, 50, 75, 100),       # corresponding scores
+    xout = ACT,
+    rule = 2                         # clamp values outside the range
+  )$y)
+
+# Summary table for actScore
+score1 <- RelTransport %>% select(actScore)
+# stargazer(score1, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = F, header = F)
+
+```
+
+```{r results='asis'}
+# Score for CAR: % of workers who drive alone to work
+RelTransport <- RelTransport %>%
+  mutate(carScore = approx(
+    x = c(90, 82, 76, 65, 50),   # reversed order because lower CAR is better
+    y = c(0, 25, 50, 75, 100),   # corresponding scores
+    xout = CAR,
+    rule = 2                     # clamp values outside the range
+  )$y)
+
+# Summary table for carScore
+score2 <- RelTransport %>% select(carScore)
+# stargazer(score2, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+
+```{r results='asis'}
+
+# Score for PUB: % of workers using public transit
+RelTransport <- RelTransport %>%
+  mutate(pubScore = approx(
+    x = c(0, 0.5, 2, 5, 10),
+    y = c(0, 25, 50, 75, 100),
+    xout = PUB,
+    rule = 2
+  )$y)
+
+# Summary table for pubScore
+score3 <- RelTransport %>% select(pubScore)
+# stargazer(score3, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+
+
+```{r results='asis'}
+# Score for NVC: % of households without a vehicle (lower is better)
+RelTransport <- RelTransport %>%
+  mutate(nvcScore = approx(
+    x = c(25, 15, 8.5, 4, 0),   # descending because lower is better
+    y = c(0, 25, 50, 75, 100),  # corresponding scores
+    xout = NVC,
+    rule = 2
+  )$y)
+
+# Summary table for nvcScore
+score4 <- RelTransport %>% select(nvcScore)
+# stargazer(score4, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+
+```{r results='asis'}
+
+# Score for TRV: mean travel time to work (lower is better)
+RelTransport <- RelTransport %>%
+  mutate(trvScore = approx(
+    x = c(35, 30, 26.4, 20, 15),
+    y = c(0, 25, 50, 75, 100),
+    xout = TRV,
+    rule = 2
+  )$y)
+
+
+# Summary table for trvScore
+score5 <- RelTransport %>% select(trvScore)
+# stargazer(score5, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+```{r results='asis'}
+# Score for EKW: Walkability index (higher is better)
+RelTransport <- RelTransport %>%
+  mutate(ekwScore = approx(
+    x = c(3, 6, 9, 13, 16),
+    y = c(0, 25, 50, 75, 100),
+    xout = EKW,
+    rule = 2
+  )$y)
+
+# Summary table for ekwScore
+score6 <- RelTransport %>% select(ekwScore)
+# stargazer(score6, type = 'latex', summary.stat = c("n", "mean", "sd", "min", "median", "max"), notes.append = FALSE, header = FALSE)
+```
+
+```{r, fig.height=4, fig.width=10}
+library(tibble)
+library(purrr)
+library(ggplot2)
+library(patchwork)
+
+# Define scoring curves with renamed internal variables
+transportScoringCurves <- list(
+  `ACT-Walk/Bike to Work` = tibble(
+    act_vals = c(0, 1.2, 3.5, 7, 17),
+    act_scores = c(0, 25, 50, 75, 100)
+  ),
+  `CAR-Drive Alone to Work` = tibble(
+    car_vals = c(90, 82, 76, 65, 50),
+    car_scores = c(0, 25, 50, 75, 100)
+  ),
+  `PUB-Uses Public Transit` = tibble(
+    pub_vals = c(0, 0.5, 2, 5, 10),
+    pub_scores = c(0, 25, 50, 75, 100)
+  ),
+  `NVC-Housholds Without Vehicle` = tibble(
+    nvc_vals = c(25, 15, 8.5, 4, 0),
+    nvc_scores = c(0, 25, 50, 75, 100)
+  ),
+  `TRV-Travel Time to Work` = tibble(
+    trv_vals = c(35, 30, 26.4, 20, 15),
+    trv_scores = c(0, 25, 50, 75, 100)
+  ),
+`EKW-Walkability Index` = tibble(
+    ekw_vals = c(3, 6, 9, 13, 16),
+    ekw_scores = c(0, 25, 50, 75, 100)
+  )
+)
+
+# Plots
+scoringPlots <- imap(transportScoringCurves, ~ {
+  ggplot(.x, aes(x = .x[[1]], y = .x[[2]])) +
+    geom_line() +
+    geom_point(size = 2.5) +
+    labs(title = .y, x = "Value", y = "Condition Score") +
+    theme_bw() +
+    scale_y_continuous(limits = c(0, 100), breaks = c(0, 25, 50, 75, 100)) +
+    theme(strip.background = element_blank())
+})
+
+# # Wrap plots into 2 rows of 3 for better fit
+# wrap_plots(scoringPlots, ncol = 3)
+
+```
+
+```{r, fig.width=10, fig.height=10}
+
+# 
+# options(tigris_use_cache = TRUE)
+# 
+# zoom_xlim <- c(-89, -88)
+# zoom_ylim <- c(43.8, 44.7)
+# 
+# # Get spatial data
+# spatial <- tracts(state = "WI", class = "sf", year = 2023, progress_bar = FALSE)
+# zips <- unique(RelTransport$GEOID)
+# 
+# foxZips <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(GEOID %in% zips)
+# background <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(!GEOID %in% zips)
+# 
+# # Compute the new index
+# ind <- RelTransport %>%
+#   select(GEOID, ends_with("Score")) %>%
+#   rowwise() %>%
+#   mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>%
+#   ungroup() %>%
+#   mutate(GEOID = as.character(GEOID)) %>%
+#   left_join(foxZips, by = "GEOID") %>%
+#   st_as_sf()
+# 
+# # Map
+# ggplot() +
+#   geom_sf(data = ind, aes(fill = newIndex), color = "black") +
+#   geom_sf(data = background, fill = "grey95", color = "grey80", linewidth = 0.1) +
+#   scale_fill_viridis_c(name = "Index", limits = c(0, 100)) +
+#   labs(title = "Map of Census Tracts by Transportation Index") +
+#   theme_minimal() +
+#   coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+```
+
+# Map
+I set 0-100 limits on the scale. Although the values in our dataset do not necessarily reach both ends of the spectrum, this is helpful so that we can compare the tri county to national benchmarks (where 0 would be the worst, and 100 the best in the nation) and understand where we stand relative to other areas in the United States.
+
+```{r, fig.width=8, fig.height=6, fig.cap="Map of Reliable Transportation index by census tract"}
+library(tigris)
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(viridis)
+
+options(tigris_use_cache = TRUE)
+
+# Set zoom limits
+zoom_xlim <- c(-89, -88)
+zoom_ylim <- c(43.8, 44.7)
+
+# Pull tracts from WI
+spatial <- tracts(state = "WI", class = "sf", year = 2023, progress_bar = FALSE)
+
+# Identify GEOIDs we care about
+zips <- unique(RelTransport$GEOID)
+
+# Subset spatial layers
+foxZips <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(GEOID %in% zips)
+background <- spatial %>% mutate(GEOID = as.character(GEOID)) %>% filter(!GEOID %in% zips)
+
+# Build the new scoring index
+ind <- RelTransport %>%
+  select(GEOID, ends_with("Score")) %>%
+  rowwise() %>%
+  mutate(newIndex = mean(c_across(ends_with("Score")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(GEOID = as.character(GEOID)) %>%
+  st_drop_geometry() %>%  # drop geometry in case it's an sf already
+  left_join(foxZips, by = "GEOID") %>%
+  st_as_sf()
+
+# COUNTY OUTLINES
+county_outline <- counties(state = "WI", year = 2023, class = "sf") %>%
+  filter(NAME %in% c("Outagamie", "Winnebago", "Calumet"))
+
+# LAKES
+lakes <- rbind(
+  area_water(state = "WI", county = "Outagamie", year = 2023),
+  area_water(state = "WI", county = "Winnebago", year = 2023),
+  area_water(state = "WI", county = "Calumet", year = 2023)
+)
+
+# Final map using newIndex but with geographic features
+ggplot() +
+  geom_sf(data = county_outline, fill = "grey80", color = "white", linewidth = 0.2) +     # county background
+  geom_sf(data = ind, aes(fill = newIndex), color = "black", linewidth = 0.2) +           # data tracts
+  geom_sf(data = background, fill = NA, color = "grey95", color = "grey80", linewidth = 0.1) +              # background tracts
+  geom_sf(data = lakes, fill = "grey95", color = NA) +                                    # water bodies
+  scale_fill_viridis_c(name = "Transportation Index", limits = c(0, 100)) + ### not sure if it's right to set this scale for the color pallette here.
+  theme_minimal() +
+  coord_sf(xlim = zoom_xlim, ylim = zoom_ylim, expand = FALSE)
+
+```
+
+The results show a clear urban–rural divide. Urban tracts, especially near downtown Appleton and Oshkosh, score higher due to better walkability, transit access, and lower car dependency. Rural tracts score lower, which is expected, but this may reflect the index over-penalizing areas where walking or transit aren’t practical. Equal weighting of variables and subjective breakpoints may also influence results, so these are areas to review as we refine the index.
