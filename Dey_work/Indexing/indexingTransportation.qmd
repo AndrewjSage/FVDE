@@ -269,7 +269,6 @@ ZIPCodes_index <- ZIPCodes_index |> mutate(GEOID = as.character(GEOID)) |> mutat
 ```{r}
 # bind all the indexes together and export as csv
 index_final <- bind_rows(tracts_index, CitiesAndTowns_index, Counties_index, ZIPCodes_index, Regions_index)
-write.csv(index_final, file = "/Users/derejepollock/R Studio Projects/FVDE/Dey_work/Indexing/Reliable_Transportation_indexes.csv", row.names = FALSE)
 ```
 
 
@@ -291,7 +290,7 @@ ReliableTransportationIndexes <- ReliableTransportationIndexes %>%
   select(layer, geoid, topic, stratification, period, value)
 
 # write to a csv file to be sent to susan
-write.csv(ReliableTransportationIndexes, file = "/Users/derejepollock/R Studio Projects/FVDE/Dey_work/Indexing/reliable_transportation_indexes_formated.csv", row.names = FALSE)
+write.csv(ReliableTransportationIndexes, file = "C:/Users/deypo/OneDrive/Documents/RStudioProjects/FVDE/Dey_work/Indexing/reliable_transportation_indexes_2022-23_formated.csv", row.names = FALSE)
 ```
 
 
